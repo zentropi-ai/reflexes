@@ -65,13 +65,21 @@ for ev, entries in d.get('hooks', {}).items():
             if 'reflexes' in h.get('command', ''):
                 print(f'{ev}: {h[\"command\"]}')"
 
-# Plus the feature flag check (Codex only):
-grep -E '^codex_hooks' ~/.codex/config.toml
+# Plus, for Codex, two host-side gates (the doctor checks/flags both):
+uv run <SKILL_DIR>/scripts/reflexes-doctor --config ~/.reflexes/reflexes.yaml
 ```
 
-If the flag check returns nothing, Step 6d didn't run. Without the
-`codex_hooks = true` line, `~/.codex/hooks.json` is **inert** — the
-hook subprocess never fires. Re-run Step 6d.
+For Codex specifically, `hooks.json` is **inert** unless BOTH are true:
+
+1. **Enabled:** `hooks = true` is set under the `[features]` table in
+   `~/.codex/config.toml`. A bare top-level key is ignored. The doctor flags this.
+2. **Trusted:** the user has reviewed and trusted the exact hook definitions —
+   run `/hooks` in Codex, trust the Reflexes definitions, restart. Codex
+   silently skips **untrusted** hooks, which looks identical to an unreachable
+   evaluator: a silent fail-open. Editing a hook's command changes its hash and
+   requires trusting it again. The doctor can't see Codex's trust state, so it
+   warns rather than declaring Codex "enforcing" — verify by triggering a known
+   policy and confirming it fires.
 
 **Did you restart the host CLI after Step 6b?** Both Claude Code and
 Codex load settings/hooks on startup. A running session won't pick

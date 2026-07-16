@@ -205,95 +205,56 @@ def test_pattern_fix_skill_md_doc_references_resolve_in_package():
 # ---------- Behavioral-equivalence ----------
 
 
-def test_behavioral_equivalence_step6d_codex_hooks_flag_added_when_missing(tmp_path):
-    """Step 6d writes `codex_hooks = true` to ~/.codex/config.toml
-    when the flag is missing. Without this flag, hooks.json is inert
-    and no hooks fire.
-    """
-    home = tmp_path / "home"
-    (home / ".codex").mkdir(parents=True)
-    config_path = home / ".codex" / "config.toml"
-    # No existing config.toml — Step 6d should create it with the flag.
-    assert not config_path.exists()
-
-    script = textwrap.dedent(f"""
-        import os, pathlib
-        path = pathlib.Path("{config_path}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing = path.read_text() if path.exists() else ""
-        if "codex_hooks" in existing:
-            print("codex_hooks already configured; preserving existing value")
-        else:
-            needs_newline = existing and not existing.endswith("\\n")
-            with open(path, "a") as f:
-                if needs_newline:
-                    f.write("\\n")
-                f.write("codex_hooks = true\\n")
-            print("added codex_hooks = true")
-    """)
-    subprocess.run([sys.executable, "-c", script], check=True)
-
-    assert config_path.exists()
-    body = config_path.read_text()
-    assert "codex_hooks = true" in body
+def _enable_codex_hooks(config_path):
+    """Simulate the INSTALL.md Codex enable step: ensure `hooks = true` sits
+    UNDER a [features] table (a bare top-level key is silently ignored by Codex),
+    idempotently — a pre-existing `hooks` line under [features] is left as-is.
+    Returns 'preserved' or 'added'."""
+    text = config_path.read_text() if config_path.exists() else ""
+    m = re.search(r"(?ms)^\[features\]\s*$(.*?)(?=^\[|\Z)", text)
+    if m and re.search(r"(?m)^\s*hooks\s*=", m.group(1)):
+        return "preserved"
+    if m:  # [features] exists but has no hooks key — add it under the header
+        text = re.sub(r"(?m)^\[features\]\s*$", "[features]\nhooks = true", text, count=1)
+    else:  # no [features] table — append one
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += "[features]\nhooks = true\n"
+    config_path.write_text(text)
+    return "added"
 
 
-def test_behavioral_equivalence_step6d_preserves_existing_config_toml(tmp_path):
-    """If config.toml already has unrelated content, Step 6d appends
-    `codex_hooks = true` without disturbing existing keys."""
-    home = tmp_path / "home"
-    (home / ".codex").mkdir(parents=True)
-    config_path = home / ".codex" / "config.toml"
-    # Pre-existing user content.
+def test_behavioral_equivalence_codex_hooks_enabled_when_missing(tmp_path):
+    """Enabling Codex hooks writes `hooks = true` UNDER [features] (a bare key is
+    ignored) — validated by the real doctor check."""
+    from reflexes.doctor import _codex_hooks_enabled
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    assert _enable_codex_hooks(config_path) == "added"
+    assert _codex_hooks_enabled(config_path) is True
+
+
+def test_behavioral_equivalence_codex_hooks_preserves_existing_config(tmp_path):
+    """Enabling hooks doesn't disturb existing config.toml keys."""
+    from reflexes.doctor import _codex_hooks_enabled
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
     config_path.write_text('model = "gpt-5-mini"\nsandbox = "danger-full-access"\n')
-
-    script = textwrap.dedent(f"""
-        import os, pathlib
-        path = pathlib.Path("{config_path}")
-        existing = path.read_text() if path.exists() else ""
-        if "codex_hooks" in existing:
-            print("already configured")
-        else:
-            needs_newline = existing and not existing.endswith("\\n")
-            with open(path, "a") as f:
-                if needs_newline:
-                    f.write("\\n")
-                f.write("codex_hooks = true\\n")
-            print("added")
-    """)
-    subprocess.run([sys.executable, "-c", script], check=True)
-
+    _enable_codex_hooks(config_path)
     body = config_path.read_text()
-    assert 'model = "gpt-5-mini"' in body, "existing keys must be preserved"
-    assert 'sandbox = "danger-full-access"' in body
-    assert "codex_hooks = true" in body
+    assert 'model = "gpt-5-mini"' in body and 'sandbox = "danger-full-access"' in body
+    assert _codex_hooks_enabled(config_path) is True
 
 
-def test_behavioral_equivalence_step6d_idempotent_when_flag_present(tmp_path):
-    """Step 6d is idempotent — re-running when codex_hooks is already set
-    (regardless of value) preserves the existing line."""
-    home = tmp_path / "home"
-    (home / ".codex").mkdir(parents=True)
-    config_path = home / ".codex" / "config.toml"
-    # User has explicitly disabled hooks for some reason — don't flip them.
-    config_path.write_text("codex_hooks = false\n")
-
-    script = textwrap.dedent(f"""
-        import pathlib
-        path = pathlib.Path("{config_path}")
-        existing = path.read_text() if path.exists() else ""
-        if "codex_hooks" in existing:
-            print("preserved")
-        else:
-            with open(path, "a") as f:
-                f.write("codex_hooks = true\\n")
-            print("added")
-    """)
-    result = subprocess.run([sys.executable, "-c", script],
-                            capture_output=True, text=True, check=True)
-    assert "preserved" in result.stdout
-    # User's explicit `false` was preserved — Step 6d doesn't flip it.
-    assert config_path.read_text() == "codex_hooks = false\n"
+def test_behavioral_equivalence_codex_hooks_idempotent_when_present(tmp_path):
+    """If the user has explicitly set `[features] hooks = false`, don't flip it."""
+    from reflexes.doctor import _codex_hooks_enabled
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("[features]\nhooks = false\n")
+    assert _enable_codex_hooks(config_path) == "preserved"
+    assert config_path.read_text() == "[features]\nhooks = false\n"
+    assert _codex_hooks_enabled(config_path) is False
 
 
 def test_runtime_smoke_empty_config_and_stdin_prints_empty_json():

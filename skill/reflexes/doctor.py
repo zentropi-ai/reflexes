@@ -96,16 +96,16 @@ def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
 
 
 def _codex_hooks_enabled(config_toml: Path) -> bool | None:
-    """Is `codex_hooks = true` set under the [features] table in Codex's
-    config.toml? Returns True/False, or None if the file can't be read. A bare
-    top-level `codex_hooks = true` does NOT count — Codex ignores it."""
+    """Is `hooks = true` set under the [features] table in Codex's config.toml?
+    Returns True/False, or None if the file can't be read. A bare top-level
+    `hooks = true` does NOT count — Codex ignores it."""
     try:
         text = config_toml.read_text()
     except OSError:
         return None
     try:
         import tomllib  # 3.11+
-        return tomllib.loads(text).get("features", {}).get("codex_hooks") is True
+        return tomllib.loads(text).get("features", {}).get("hooks") is True
     except ModuleNotFoundError:
         pass  # 3.10 — fall back to a text scan
     except Exception:
@@ -115,7 +115,7 @@ def _codex_hooks_enabled(config_toml: Path) -> bool | None:
         s = line.strip()
         if s.startswith("[") and s.endswith("]"):
             in_features = s == "[features]"
-        elif in_features and s.replace(" ", "").startswith("codex_hooks=true"):
+        elif in_features and s.replace(" ", "").startswith("hooks=true"):
             return True
     return False
 
@@ -145,22 +145,29 @@ def _check_hosts() -> list[tuple[str, str, str]]:
         if not _wired(cx):
             results.append(("OpenAI Codex", _WARN, f"installed but no reflexes hooks in {cx}"))
         else:
-            # hooks.json alone is NOT enough: Codex only loads hooks when
-            # `codex_hooks = true` sits under the [features] table in config.toml.
-            # A bare top-level key (or a missing one) is silently ignored — the
-            # hooks look wired but never fire (fail-open). Verify the real switch.
+            # hooks.json alone is NOT enough. Codex loads hooks only when
+            # `[features] hooks = true` is set, AND the user has TRUSTED the exact
+            # hook definitions (`/hooks`).
+            # We can inspect the first; we CANNOT see Codex's trust state — so we
+            # never claim "enforcing" for Codex, only "configured", and warn.
             enabled = _codex_hooks_enabled(cx_dir / "config.toml")
-            if enabled is True:
-                results.append(("OpenAI Codex", _OK, f"hooks wired in {cx}; [features] codex_hooks enabled"))
-            elif enabled is False:
+            if enabled is False:
                 results.append(("OpenAI Codex", _WARN,
                                 f"hooks wired in {cx} but ~/.codex/config.toml is missing "
-                                "`[features]`→`codex_hooks = true` — Codex will IGNORE the "
-                                "hooks and NOT enforce. Add it under the [features] table."))
-            else:  # unreadable config.toml
+                                "`[features]`→`hooks = true` — Codex will IGNORE the hooks and "
+                                "NOT enforce. Add it under the [features] table."))
+            elif enabled is None:
                 results.append(("OpenAI Codex", _WARN,
                                 f"hooks wired in {cx} but couldn't read ~/.codex/config.toml to "
-                                "confirm `[features] codex_hooks = true` (Codex needs it to load hooks)."))
+                                "confirm `[features] hooks = true` (Codex needs it to load hooks)."))
+            else:  # configured + enabled — but trust/enforcement can't be verified here
+                results.append(("OpenAI Codex", _WARN,
+                                f"hooks wired in {cx} and `[features] hooks` enabled — but Codex "
+                                "also requires you to TRUST command hooks, which can't be verified "
+                                "from here. In Codex, run `/hooks`, trust the Reflexes definitions, "
+                                "restart, then confirm a known policy actually fires. (Until then, "
+                                "untrusted hooks are silently skipped — fail-open. Editing a hook "
+                                "re-requires trust.)"))
     hm = home / ".hermes" / "config.yaml"
     if (home / ".hermes").exists():
         wired = hm.exists() and _wired(hm)

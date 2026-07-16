@@ -202,19 +202,28 @@ Merge rules:
 - If the file isn't valid JSON, stop and tell the user — don't overwrite it.
 - Create the file (and its dir) if absent.
 
-**Codex only:** enable hooks in `~/.codex/config.toml` — it must be **under the
-`[features]` table**, not a bare top-level key (Codex silently ignores
-`hooks.json` otherwise, so this is easy to get wrong):
+**Codex only — two steps, both required (Codex silently skips hooks otherwise):**
+
+**(a) Enable hooks** in `~/.codex/config.toml`, **under the `[features]` table**
+(a bare top-level key is ignored):
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
-Add the `[features]` header if it's absent; add `codex_hooks = true` under it if
-missing. If the user has `codex_hooks = false`, ask before flipping. After this,
-`reflexes-doctor` will confirm Codex hooks are actually enabled (not just that
-`hooks.json` exists).
+Add the `[features]` header if it's absent; if the user has `hooks` set to
+`false`, ask before flipping.
+
+**(b) Trust the hooks.** Codex won't run command hooks until the user has
+reviewed and **trusted** them — an untrusted hook looks wired but never fires
+(fail open). Tell the user to open Codex, run `/hooks`, review the Reflexes
+definitions, and trust them, then restart Codex. (Editing a hook's command later
+changes its hash and requires trusting it again.)
+
+`reflexes-doctor` confirms (a) but **cannot see Codex's trust state**, so it
+won't declare Codex "enforcing" — after trusting, confirm end-to-end: trigger a
+known policy and check it actually fires.
 
 ### Hermes variant
 
@@ -345,10 +354,14 @@ options = ClaudeAgentOptions(
   (`test -f <SKILL_DIR>/scripts/reflexes-hook`); the host was restarted. Run
   the settings command by hand with a sample JSON payload on stdin to see the
   error.
-- **Codex does nothing:** `codex_hooks = true` is missing from
-  `~/.codex/config.toml`, or it's there but **not under the `[features]` table**
-  (a bare top-level `codex_hooks = true` is silently ignored). `reflexes-doctor`
-  now flags this.
+- **Codex does nothing:** usually one of two host-side gates — (1) hooks not
+  enabled: add `hooks = true` under the `[features]` table in
+  `~/.codex/config.toml` (a bare top-level key is ignored); `reflexes-doctor`
+  flags this. Or (2) hooks not **trusted**: run
+  `/hooks` in Codex, trust the Reflexes definitions, and restart — Codex
+  silently skips untrusted hooks (same symptom as an unreachable evaluator:
+  fail-open), and editing a hook re-requires trust. The doctor can't see trust
+  state, so it warns you to verify (2) yourself by triggering a known policy.
 
 ## Re-running
 

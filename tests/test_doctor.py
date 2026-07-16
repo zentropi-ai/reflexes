@@ -102,37 +102,48 @@ def test_evaluator_probe_error_is_fail_not_crash(tmp_path, monkeypatch):
 
 
 def test_codex_hooks_enabled_detection(tmp_path):
-    """Codex only loads hooks when `codex_hooks = true` is under [features]; a
-    bare top-level key is silently ignored (the fail-open the doctor must catch)."""
+    """Codex loads hooks only when `hooks = true` is under [features]; a bare
+    top-level key is silently ignored (the fail-open the doctor must catch)."""
     from reflexes.doctor import _codex_hooks_enabled
     good = tmp_path / "good.toml"
-    good.write_text("model = \"gpt-5\"\n[features]\ncodex_hooks = true\n")
+    good.write_text("model = \"gpt-5\"\n[features]\nhooks = true\n")
     assert _codex_hooks_enabled(good) is True
-    bare = tmp_path / "bare.toml"          # bare top-level key -> ignored by Codex
-    bare.write_text("codex_hooks = true\nmodel = \"gpt-5\"\n")
+    bare = tmp_path / "bare.toml"                            # bare top-level -> ignored
+    bare.write_text("hooks = true\nmodel = \"gpt-5\"\n")
     assert _codex_hooks_enabled(bare) is False
     off = tmp_path / "off.toml"
-    off.write_text("[features]\ncodex_hooks = false\n")
+    off.write_text("[features]\nhooks = false\n")
     assert _codex_hooks_enabled(off) is False
     assert _codex_hooks_enabled(tmp_path / "missing.toml") is None
 
 
-def test_codex_host_warns_when_hooks_json_wired_but_feature_disabled(tmp_path, monkeypatch):
-    """The regression from the round-trip test: hooks.json wired + config.toml
-    missing [features] codex_hooks => Codex silently doesn't enforce. Doctor must
-    NOT report this Codex host as OK."""
+def _codex_host(tmp_path, monkeypatch, config_toml_text):
     from reflexes.doctor import _check_hosts
     codex = tmp_path / ".codex"
     codex.mkdir()
     (codex / "hooks.json").write_text('{"hooks":[{"command":"reflexes-hook --host codex"}]}')
-    (codex / "config.toml").write_text("codex_hooks = true\n")  # bare = ignored by Codex
+    (codex / "config.toml").write_text(config_toml_text)
     monkeypatch.setenv("CODEX_HOME", str(codex))
     monkeypatch.setenv("HOME", str(tmp_path))  # avoid detecting other real hosts
     hosts = {name: (status, msg) for name, status, msg in _check_hosts()}
     assert "OpenAI Codex" in hosts
-    status, msg = hosts["OpenAI Codex"]
-    assert status == "warn", f"expected warn (not OK) for disabled codex hooks, got {status}: {msg}"
+    return hosts["OpenAI Codex"]
+
+
+def test_codex_host_warns_when_feature_disabled(tmp_path, monkeypatch):
+    """hooks.json wired + [features] enable flag missing => Codex silently doesn't
+    enforce. Doctor must NOT report OK."""
+    status, msg = _codex_host(tmp_path, monkeypatch, "hooks = true\n")  # bare (no [features]) = ignored
+    assert status == "warn", f"expected warn, got {status}: {msg}"
     assert "features" in msg.lower()
+
+
+def test_codex_host_warns_on_trust_even_when_configured_and_enabled(tmp_path, monkeypatch):
+    """Even fully wired + enabled, the doctor cannot verify Codex hook TRUST, so
+    it must warn (not claim enforcing) and point at `/hooks`. (The bug report.)"""
+    status, msg = _codex_host(tmp_path, monkeypatch, "[features]\nhooks = true\n")
+    assert status == "warn", f"expected warn (trust unverifiable), got {status}: {msg}"
+    assert "trust" in msg.lower() and "/hooks" in msg
 
 
 def test_run_doctor_exit_codes(tmp_path, monkeypatch, capsys):
