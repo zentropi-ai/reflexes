@@ -70,9 +70,10 @@ def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
             _WARN,
             "no ZENTROPI_API_KEY set — the default Zentropi CoPE evaluator "
             "needs one, so policies will NOT fire yet. Get a free key at "
-            "https://zentropi.ai and export it (`export ZENTROPI_API_KEY="
-            "<key>`) in your host's environment, or swap to an evaluator you "
-            "already have a key for (see 'Swap the Evaluator'). Re-run this "
+            "https://zentropi.ai and put it where this host picks up environment "
+            "variables so it's visible here (e.g. Codex reads `~/.codex/.env`) — "
+            "not in a shared config file — or swap to an evaluator you already "
+            "have a key for (see 'Swap the Evaluator'). Re-run this "
             "doctor afterward to confirm enforcement is live.",
         )
     probe_criteria = "Label = 1 when the content contains the word REFLEXES_DOCTOR_PROBE.\nLabel = 0 otherwise."

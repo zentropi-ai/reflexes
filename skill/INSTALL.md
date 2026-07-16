@@ -46,10 +46,11 @@ test -n "$ZENTROPI_API_KEY" && echo "key: set" || echo "key: MISSING"
 ```
 
 If the key is **MISSING**: tell the user to create a free account at
-https://zentropi.ai, mint an API key, and add `export ZENTROPI_API_KEY=<key>`
-to their shell profile — it must live in the environment the host CLI runs
-in. Or skip the key and swap to another evaluator (SKILL.md → Swap the
-evaluator). Either way the doctor (Step 7) will tell you where you stand.
+https://zentropi.ai and mint an API key, and **advise them where to put it so
+the host (you) can see it** as an environment variable — its env source, not a
+shared/committed config file. You know where that is for your host (e.g. Codex
+reads `~/.codex/.env`). Or skip the key and swap to another evaluator (SKILL.md
+→ Swap the evaluator). Either way the doctor (Step 7) tells you where you stand.
 
 ## Step 2: Confirm the bundled runtime
 

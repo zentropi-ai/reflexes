@@ -262,11 +262,15 @@ evaluators:
 ```
 
 `api_key_env` is the *name* of the environment variable Reflexes reads the key
-from — never put the key itself in the YAML. Export it where the host process
-will see it (e.g. `export OPENAI_API_KEY=sk-...` in the host's launch
-environment), restart the host, and re-run the doctor to confirm the new
-evaluator answers. Reflexes uses **one evaluator for all policies**
-(`evaluators.default`) — there is no per-policy evaluator at this time.
+from — never put the key itself in the YAML.
+
+The key just has to be an environment variable the running host picks up, so
+**advise the user where to put it so you (the host) can see it** — its env
+source, not a shared/committed config file. You know where that is for your host
+(e.g. Codex reads `~/.codex/.env`). Then restart the host and re-run the doctor.
+
+Reflexes uses **one evaluator for all policies** (`evaluators.default`) — there
+is no per-policy evaluator at this time.
 
 On the Zentropi evaluator, a rate-limit or subscriber-only (image/video) error
 makes the check **fail open** — the operation proceeds *unchecked* and a note
