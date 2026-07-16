@@ -214,26 +214,56 @@ echo '{...same JSON...}' | python3 -m reflexes.integrations.openai_codex \
 
 ---
 
-## 5. Enable debug logging
+## 5. Logging
 
-Reflexes ships an observability module. Set `REFLEXES_LOG_FORMAT=json`
-to switch Reflexes' loggers to structured JSON records:
+Logging is controlled entirely by the `logging:` block in `reflexes.yaml`
+— there are no environment variables. Both keys are optional with safe
+defaults:
 
-```bash
-export REFLEXES_LOG_FORMAT=json
+```yaml
+logging:
+  level: warning   # off | error | warning (default) | info | debug
+  format: text     # text | json
 ```
 
-Restart the host CLI and trigger the behavior you expect to catch.
-Reflexes' loggers (`reflexes.*`) then render as JSON in your host's log
-output; each record carries the standard fields (`ts`, `level`,
-`logger`, `message`) plus any structured extras attached at the call
-site.
+**Levels.** `level` sets how much is captured:
 
-For richer per-evaluation telemetry — the trigger that fired, the
-policy name, and the verdict (label, confidence, latency) — install the
-`[otel]` extra (`pip install 'reflexes[otel]'`) and point it at your
-OpenTelemetry collector; the `reflexes.evaluate` span carries those
-attributes (see the README's Observability section).
+| level | captures |
+|---|---|
+| `off` | nothing (no log file is created) |
+| `error` | evaluator/config failures only |
+| `warning` *(default)* | enforcement problems (fail-open, evaluator errors) **and** `log`-action hits — but **no message content** |
+| `info` | + per-decision detail (still no content) |
+| `debug` | + the **evaluated content** (user requests, tool args, responses) and per-policy verdicts |
+
+Message content is emitted **only at `debug`**, so the `warning` default
+keeps potentially sensitive data out of the log. This is the key knob for
+diagnosing "why didn't my policy fire?": set `level: debug`, restart the
+host, reproduce, inspect the `reflexes.*` records — then **set the level
+back**. `reflexes-doctor` warns while `debug` is active, precisely because
+content is being written to disk.
+
+**Format.** `format: json` emits one JSON object per line (fields `ts`,
+`level`, `logger`, `host`, `message`, plus any structured extras) for
+log-aggregation stacks (Loki, Cloudwatch, …); `text` is the default
+human-readable format.
+
+**Host tag.** Every record is prefixed with the originating host —
+`[claude-code]`, `[codex]`, `[hermes]`, `[openclaw]` — because multiple
+hooks on one machine can share a log file (Codex reuses the Claude Code
+hook and writes to the same `~/.cache/reflexes/debug.log`, owner-only), so
+the tag is what tells their lines apart. In-process SDK hosts log to their
+own application output.
+
+**Turning enforcement off** is a separate switch — see *Turning Reflexes
+on and off* in `SKILL.md` (the top-level `enabled:` key), not the log
+level. `logging: off` silences the log; it does **not** stop enforcement.
+
+For richer per-evaluation telemetry — the trigger that fired, the policy
+name, and the verdict (label, confidence, latency) as metrics/spans —
+install the `[otel]` extra (`pip install 'reflexes[otel]'`) and point it
+at your OpenTelemetry collector; the `reflexes.evaluate` span carries
+those attributes (see the README's Observability section).
 
 If the evaluation shows the policy scored but returned `label=0`: the
 evaluator scored the content as not matching. Inspect the

@@ -28,16 +28,22 @@ def _dispatch(argv):
         else:
             rest.append(a)
     sys.argv = [sys.argv[0]] + rest
+    # Canonical host tag threaded into the logger so multiple hooks sharing one
+    # log file on a machine (Codex reuses the Claude Code hook → same debug.log)
+    # are distinguishable by their log-line prefix.
     if host in ("claude-code", "claude_code"):
         from reflexes.integrations.claude_code import main
+        canonical = "claude-code"
     elif host in ("codex", "openai-codex"):
         from reflexes.integrations.openai_codex import main
+        canonical = "codex"
     elif host in ("hermes", "nous-hermes"):
         from reflexes.integrations.nous_hermes_shell import main
+        canonical = "hermes"
     else:
         sys.stderr.write(f"[reflexes] unknown --host {host!r}\n")
         sys.exit(2)
-    main()
+    main(host=canonical)
 
 
 if __name__ == "__main__":

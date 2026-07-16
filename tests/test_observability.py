@@ -107,41 +107,142 @@ def test_record_latency_does_not_crash_when_otel_available(fresh_obs):
     obs.record_latency("ZentropiEvaluator", 75.0)
 
 
-# ---- Structured logging mode -------------------------------------------
+# ---- Diagnostic logging (configure_logging, config-driven) --------------
 
 
-def test_structured_logging_off_by_default(fresh_obs, monkeypatch):
-    obs = fresh_obs
-    monkeypatch.delenv("REFLEXES_LOG_FORMAT", raising=False)
-    assert obs.configure_structured_logging_if_requested() is False
+@pytest.fixture
+def fresh_logging(monkeypatch):
+    """Reset the one-shot logging guard + the reflexes logger between tests."""
+    import reflexes.observability as obs
+    monkeypatch.setattr(obs, "_LOGGING_CONFIGURED", False)
+    rlog = logging.getLogger("reflexes")
+    saved_level, saved_prop = rlog.level, rlog.propagate
+    saved_handlers = list(rlog.handlers)
+    yield obs
+    for h in list(rlog.handlers):
+        if h not in saved_handlers:
+            rlog.removeHandler(h)
+    rlog.setLevel(saved_level)
+    rlog.propagate = saved_prop
 
 
-def test_structured_logging_on_with_env_var(fresh_obs, monkeypatch):
-    obs = fresh_obs
-    monkeypatch.setenv("REFLEXES_LOG_FORMAT", "json")
-    # Add a handler so there's something for the formatter to attach to.
+def _write_cfg(tmp_path, logging_block=""):
+    (tmp_path / "reflexes.yaml").write_text(
+        logging_block
+        + "reflexes:\n  default: []\nevaluators:\n  default:\n    type: zentropi\n"
+    )
+    return str(tmp_path / "reflexes.yaml")
+
+
+def test_default_level_is_warning_no_content(fresh_logging, tmp_path):
+    """Absent `logging:` block → WARNING. Content is DEBUG-only, so the default
+    means user content is never captured."""
+    obs = fresh_logging
+    obs.configure_logging(_write_cfg(tmp_path), force=True)
+    assert logging.getLogger("reflexes").level == logging.WARNING
+
+
+def test_level_debug_opts_into_full_capture(fresh_logging, tmp_path):
+    obs = fresh_logging
+    cfg = _write_cfg(tmp_path, "logging:\n  level: debug\n")
+    obs.configure_logging(cfg, force=True)
+    assert logging.getLogger("reflexes").level == logging.DEBUG
+
+
+def test_level_off_silences_everything(fresh_logging, tmp_path):
+    obs = fresh_logging
+    cfg = _write_cfg(tmp_path, "logging:\n  level: off\n")
+    obs.configure_logging(cfg, force=True)
+    # Above CRITICAL → no record of any level emits.
+    assert logging.getLogger("reflexes").level > logging.CRITICAL
+
+
+def test_garbled_level_fails_safe_to_warning(fresh_logging, tmp_path):
+    """An unknown/typo'd level must never resolve to a more-verbose level."""
+    obs = fresh_logging
+    cfg = _write_cfg(tmp_path, "logging:\n  level: verbose\n")
+    obs.configure_logging(cfg, force=True)
+    assert logging.getLogger("reflexes").level == logging.WARNING
+
+
+def test_format_json_installs_json_formatter(fresh_logging, tmp_path):
+    obs = fresh_logging
     handler = logging.StreamHandler()
     logging.getLogger().addHandler(handler)
     try:
-        result = obs.configure_structured_logging_if_requested()
-        assert result is True
+        cfg = _write_cfg(tmp_path, "logging:\n  format: json\n")
+        obs.configure_logging(cfg, force=True)
         assert isinstance(handler.formatter, obs._JsonFormatter)
     finally:
         logging.getLogger().removeHandler(handler)
 
 
-def test_structured_logging_case_insensitive(fresh_obs, monkeypatch):
-    obs = fresh_obs
-    monkeypatch.setenv("REFLEXES_LOG_FORMAT", "JSON")
-    assert obs.configure_structured_logging_if_requested() is True
+def test_guard_first_caller_wins_without_force(fresh_logging, tmp_path):
+    """configure_from_file (no force) must not clobber a prior forced config."""
+    obs = fresh_logging
+    obs.configure_logging(_write_cfg(tmp_path, "logging:\n  level: debug\n"), force=True)
+    # A later non-forced call with a different level is ignored.
+    other = tmp_path / "other.yaml"
+    other.write_text("logging:\n  level: off\nreflexes:\n  default: []\n")
+    obs.configure_logging(str(other))
+    assert logging.getLogger("reflexes").level == logging.DEBUG
 
 
-def test_structured_logging_other_values_off(fresh_obs, monkeypatch):
-    obs = fresh_obs
-    monkeypatch.setenv("REFLEXES_LOG_FORMAT", "text")
-    assert obs.configure_structured_logging_if_requested() is False
-    monkeypatch.setenv("REFLEXES_LOG_FORMAT", "")
-    assert obs.configure_structured_logging_if_requested() is False
+def test_host_prefix_in_text_log(fresh_logging, tmp_path):
+    """The host tag distinguishes hooks that share one log file (Codex reuses
+    the Claude Code hook → same debug.log)."""
+    obs = fresh_logging
+    logfile = tmp_path / "d.log"
+    obs.configure_logging(
+        _write_cfg(tmp_path, "logging:\n  level: debug\n"),
+        log_file=str(logfile), host="codex", force=True,
+    )
+    logging.getLogger("reflexes.probe").warning("hi")
+    for h in logging.getLogger("reflexes").handlers:
+        h.flush()
+    assert "[codex]" in logfile.read_text()
+
+
+def test_host_field_in_json_log(fresh_logging, tmp_path):
+    import json as _json
+    obs = fresh_logging
+    logfile = tmp_path / "d.log"
+    obs.configure_logging(
+        _write_cfg(tmp_path, "logging:\n  level: debug\n  format: json\n"),
+        log_file=str(logfile), host="hermes", force=True,
+    )
+    logging.getLogger("reflexes.probe").warning("hi")
+    for h in logging.getLogger("reflexes").handlers:
+        h.flush()
+    record = _json.loads(logfile.read_text().strip().splitlines()[0])
+    assert record["host"] == "hermes"
+
+
+def test_stream_handler_emits_at_configured_level(fresh_logging, tmp_path):
+    """A subprocess host without a log file (Hermes) passes stream=stderr so its
+    configured level actually surfaces — Python's last-resort handler is
+    WARNING-only, so a debug line would otherwise vanish."""
+    import io
+    obs = fresh_logging
+    buf = io.StringIO()
+    obs.configure_logging(
+        _write_cfg(tmp_path, "logging:\n  level: debug\n"),
+        stream=buf, host="hermes", force=True,
+    )
+    logging.getLogger("reflexes.probe").debug("deep detail")
+    for h in logging.getLogger("reflexes").handlers:
+        h.flush()
+    out = buf.getvalue()
+    assert "deep detail" in out and "[hermes]" in out and "DEBUG" in out
+
+
+def test_off_creates_no_log_file(fresh_logging, tmp_path):
+    """`off` with a log_file target must not create the file."""
+    obs = fresh_logging
+    log_file = tmp_path / "debug.log"
+    cfg = _write_cfg(tmp_path, "logging:\n  level: off\n")
+    obs.configure_logging(cfg, log_file=str(log_file), force=True)
+    assert not log_file.exists()
 
 
 def test_json_formatter_emits_valid_json():

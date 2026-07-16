@@ -187,7 +187,7 @@ def create_reflex_middleware(bindings: list[ReflexBinding]):
                     )
                     flags.append(_build_flag_entry(binding, verdict))
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )
@@ -244,7 +244,7 @@ def create_reflex_middleware(bindings: list[ReflexBinding]):
                     )
                     flags.append(_build_flag_entry(binding, verdict))
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )
@@ -293,7 +293,7 @@ def create_reflex_middleware(bindings: list[ReflexBinding]):
                             binding.policy.name, tool_name, verdict.confidence,
                         )
                     elif binding.action == "log":
-                        logger.info(
+                        logger.warning(
                             "Reflex %s matched tool call %s (confidence=%.2f)",
                             binding.policy.name, tool_name, verdict.confidence,
                         )
@@ -325,7 +325,7 @@ def create_reflex_middleware(bindings: list[ReflexBinding]):
                             binding.policy.name, tool_name, verdict.confidence,
                         )
                     elif binding.action == "log":
-                        logger.info(
+                        logger.warning(
                             "Reflex %s matched tool output from %s (confidence=%.2f)",
                             binding.policy.name, tool_name, verdict.confidence,
                         )

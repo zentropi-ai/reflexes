@@ -95,7 +95,7 @@ def _make_before_model_callbacks(bindings: list[ReflexBinding]) -> list:
                     logger.warning("Reflex %s flagged (confidence=%.2f)", _binding.policy.name, verdict.confidence)
                     _add_flag_to_state(callback_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
-                    logger.info("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
+                    logger.warning("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
             return None
 
         callbacks.append(_callback)
@@ -165,7 +165,7 @@ def _make_after_model_callbacks(bindings: list[ReflexBinding], agent_instruction
                     logger.warning("Reflex %s flagged (confidence=%.2f)", _binding.policy.name, verdict.confidence)
                     _add_flag_to_state(callback_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
-                    logger.info("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
+                    logger.warning("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
             return None
 
         callbacks.append(_callback)
@@ -206,7 +206,7 @@ def _make_before_tool_callbacks(bindings: list[ReflexBinding], agent_instruction
                     logger.warning("Reflex %s flagged tool %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
                     _add_flag_to_state(tool_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
-                    logger.info("Reflex %s matched tool %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
+                    logger.warning("Reflex %s matched tool %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
             return None
 
         callbacks.append(_callback)
@@ -248,7 +248,7 @@ def _make_after_tool_callbacks(bindings: list[ReflexBinding], agent_instruction:
                     logger.warning("Reflex %s flagged tool output from %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
                     _add_flag_to_state(tool_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
-                    logger.info("Reflex %s matched tool output from %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
+                    logger.warning("Reflex %s matched tool output from %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
             return None
 
         callbacks.append(_callback)

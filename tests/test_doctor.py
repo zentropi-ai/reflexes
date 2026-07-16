@@ -166,6 +166,35 @@ def test_doctor_reports_disabled_loudly(tmp_path, monkeypatch, capsys):
     assert rc != 0, "disabled must not be a green exit"
 
 
+def test_check_logging_debug_is_warn(tmp_path):
+    """`logging.level: debug` captures message content — the doctor must WARN
+    (privacy footgun), not report it as clean."""
+    from reflexes.doctor import _check_logging
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text("logging:\n  level: debug\nreflexes:\n  default: []\n")
+    status, msg = _check_logging(cfg)
+    assert status == "warn"
+    assert "content" in msg.lower()
+
+
+def test_check_logging_default_is_ok_no_content(tmp_path):
+    from reflexes.doctor import _check_logging
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text("reflexes:\n  default: []\n")  # no logging block → warning default
+    status, msg = _check_logging(cfg)
+    assert status == "ok"
+    assert "no content" in msg.lower()
+
+
+def test_check_logging_off_is_ok(tmp_path):
+    from reflexes.doctor import _check_logging
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text("logging:\n  level: off\nreflexes:\n  default: []\n")
+    status, msg = _check_logging(cfg)
+    assert status == "ok"
+    assert "disabled" in msg.lower()
+
+
 def test_run_doctor_exit_codes(tmp_path, monkeypatch, capsys):
     # Broken config must exit 2 even if evaluator/hosts are fine or absent.
     cfg = _write_config(tmp_path, broken=True)

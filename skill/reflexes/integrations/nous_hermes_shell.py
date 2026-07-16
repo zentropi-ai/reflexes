@@ -381,7 +381,7 @@ def extract_content(payload: dict, trigger: str) -> str | None:
     return None
 
 
-def main() -> None:
+def main(host: str = "hermes") -> None:
     parser = argparse.ArgumentParser(description="Reflexes Hermes shell hook")
     parser.add_argument("--config", default="reflexes.yaml")
     parser.add_argument("--reflexes", default="", help="Comma-separated group names")
@@ -393,7 +393,12 @@ def main() -> None:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from reflexes.config import load_config, configure_from_file
     from reflexes.core import safe_acheck, EvaluatorError, build_feedback, format_upgrade_notice
+    from reflexes.observability import configure_logging
 
+    # Tag log lines with the host; Hermes logs to stderr (no shared file), but
+    # the tag keeps json/aggregated logs attributable. force=True so it wins
+    # over the generic (host-less) call inside configure_from_file.
+    configure_logging(args.config, host=host, stream=sys.stderr, force=True)
     configure_from_file(args.config)
     _vacuum_notices()
 

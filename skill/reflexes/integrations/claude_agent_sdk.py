@@ -176,7 +176,7 @@ def _make_user_prompt_hook(bindings: list[ReflexBinding], memory: _SessionMemory
                         }
                     }
                 elif binding.action == "log":
-                    logger.info("Reflex %s matched (confidence=%.2f)", binding.policy.name, verdict.confidence)
+                    logger.warning("Reflex %s matched (confidence=%.2f)", binding.policy.name, verdict.confidence)
         return _upgrade_output("UserPromptSubmit", upgrade)
 
     return _hook
@@ -211,7 +211,7 @@ def _make_pre_tool_use_hook(bindings: list[ReflexBinding], memory: _SessionMemor
                         }
                     }
                 elif binding.action == "log":
-                    logger.info("Reflex %s matched tool %s (confidence=%.2f)", binding.policy.name, tool_name, verdict.confidence)
+                    logger.warning("Reflex %s matched tool %s (confidence=%.2f)", binding.policy.name, tool_name, verdict.confidence)
         return _upgrade_output("PreToolUse", upgrade)
 
     return _hook
@@ -243,7 +243,7 @@ def _make_post_tool_use_hook(bindings: list[ReflexBinding], memory: _SessionMemo
                     }
                 }
             elif binding.action == "log":
-                logger.info("Reflex %s matched tool output from %s (confidence=%.2f)", binding.policy.name, tool_name, verdict.confidence)
+                logger.warning("Reflex %s matched tool output from %s (confidence=%.2f)", binding.policy.name, tool_name, verdict.confidence)
         return _upgrade_output("PostToolUse", upgrade)
 
     return _hook
@@ -275,7 +275,7 @@ def _make_stop_hook(bindings: list[ReflexBinding], memory: _SessionMemory):
                     }
                 }
             elif binding.action == "log":
-                logger.info("Reflex %s matched response (confidence=%.2f)", binding.policy.name, verdict.confidence)
+                logger.warning("Reflex %s matched response (confidence=%.2f)", binding.policy.name, verdict.confidence)
         return _upgrade_output("Stop", upgrade)
 
     return _hook

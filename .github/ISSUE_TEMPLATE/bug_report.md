@@ -29,8 +29,10 @@ Please gather the following (see the troubleshooting guide,
 
 ## Debug log excerpt
 
-<!-- Set REFLEXES_LOG_FORMAT=json, restart your host, reproduce, and paste
-the relevant `reflexes.*` log records here. REDACT API keys and secrets. -->
+<!-- Set `logging.level: debug` in reflexes.yaml (add `format: json` for
+structured records), restart your host, reproduce, and paste the relevant
+`reflexes.*` log records here. Set the level back afterwards — debug captures
+message content. REDACT API keys and secrets. -->
 
 ```
 <paste debug log here>

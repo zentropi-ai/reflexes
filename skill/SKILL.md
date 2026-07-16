@@ -75,12 +75,10 @@ As Reflexes is a **safety harness**, treat these as hard rules:
 which policies are enforced, at which trigger, with which action, and which
 evaluator scores them. If it isn't in this file, Reflexes doesn't do it. Managing
 this file — always with the user's consent — is one of your core jobs, so know
-its shape cold. It has two required top-level keys, plus an optional `enabled`
-switch:
+its shape cold. Two required top-level keys carry the substance — `reflexes:`
+leads the file — followed by an optional operational footer:
 
 ```yaml
-enabled: true            # optional global on/off; set false to disable ALL
-                         # enforcement (default true when absent)
 reflexes:                # WHAT is enforced — named groups of bindings
   default:               # the `default` group is always active; most bindings go here
     - policy: ./policies/Unconfirmed-Destructive-Action.md   # the policy source
@@ -97,6 +95,12 @@ evaluators:              # WHO scores content against the policies
     type: zentropi
     model: cope-latest
     api_key_env: ZENTROPI_API_KEY
+
+# --- Operational settings (optional; safe defaults) ---
+enabled: true            # global on/off; false disables ALL enforcement. Absent = enabled.
+logging:
+  level: warning         # off | error | warning (default) | info | debug — content ONLY ever at debug
+  format: text           # text | json
 ```
 
 - **`reflexes:`** — one or more named **groups** of bindings. The `default` group
@@ -109,11 +113,11 @@ evaluators:              # WHO scores content against the policies
   active set share a `(policy, trigger)` pair, the last one wins.
 - **`evaluators:`** — the single evaluator, under `default`. One evaluator scores
   every policy; to change it, see *Swap the evaluator*.
-- **`enabled:`** *(optional)* — the global on/off switch. `enabled: false` turns
-  **all** enforcement off system-wide (no bindings load, every host no-ops) —
-  cleaner than uninstalling or commenting out bindings, and it leaves your
-  policies intact. Absent = on. When it's off, `reflexes-doctor` says so loudly
-  (`REFLEXES IS DISABLED`), never "all good." Restart the host after flipping it.
+- **`enabled:`** and **`logging:`** *(both optional, safe defaults)* — the
+  operational footer, kept at the bottom so the top of the file is nothing but
+  the policies you care about. `enabled:` is the global on/off switch (see
+  *Turning Reflexes on and off* below); `logging:` controls diagnostic logging
+  (defaults to no content capture — full reference in troubleshooting § Logging).
 
 **Editing it safely:**
 
@@ -125,6 +129,34 @@ evaluators:              # WHO scores content against the policies
 To make specific edits, use the focused procedures below: **Manage policies**
 (add or change a binding) and **Swap the evaluator** (change the `evaluators`
 block).
+
+### Turning Reflexes on and off
+
+The whole system has a global kill switch — no uninstall, no commenting out
+bindings, and your policies stay in place:
+
+```yaml
+enabled: false   # turns ALL enforcement off system-wide
+```
+
+- **Absent or `true` → on** (the safe default). Only the literal `false` turns
+  it off; a typo or empty value stays *on*.
+- **When off,** no bindings load and every host hook no-ops (allows). No policy
+  is read and the evaluator is never called — so a disabled system makes **zero
+  evaluator API requests**.
+- **`reflexes-doctor` reports it loudly** (`REFLEXES IS DISABLED`), never as
+  "all checks passed" — a turned-off safety layer must never look healthy.
+- **Restart the host** after flipping it (the CLI hooks re-read per call, but
+  in-process hosts cache config at startup; restart to be safe everywhere).
+
+To disable a *single* binding instead of the whole system, comment it out (see
+above). `enabled: false` is the big red switch for everything.
+
+**Logging** is the separate `logging:` block (`level` + `format`, both
+optional). It defaults to `warning`, which never captures message content —
+content is written only at `level: debug`. Full reference (levels, `off`, JSON
+format, per-host log tags) is in [`references/troubleshooting.md`](references/troubleshooting.md)
+§ Logging.
 
 ## Manage policies
 
@@ -336,7 +368,7 @@ What happens when content matches:
 
 - `deny` — block it; the policy text feeds back to the agent to self-correct.
 - `flag` — allow it, but append a one-line annotation the agent sees.
-- `log` — allow silently; log at INFO (telemetry only).
+- `log` — allow silently; record the match in the diagnostic log (visible at the default WARNING level; telemetry only, no agent-visible effect).
 
 ### Policy format
 

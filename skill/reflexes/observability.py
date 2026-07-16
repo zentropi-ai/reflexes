@@ -16,11 +16,13 @@ all consume OTLP). The instrumented surface:
   / error / no_match).
 - Histogram: ``reflexes.latency`` labeled by evaluator.
 
-Structured-logging mode is a parallel feature: setting
-``REFLEXES_LOG_FORMAT=json`` switches the existing loggers to a
-JSON-emitting formatter so log-based observability stacks (Loki,
-Cloudwatch, etc.) can parse without OTLP setup. Lives in this module
-for code locality.
+Diagnostic logging is a parallel feature, configured entirely from the
+``logging:`` block in reflexes.yaml (see ``configure_logging``) — no env
+vars. The default level is WARNING (enforcement problems + ``log``-action
+hits, never message content, which is DEBUG-only); ``off`` silences
+everything; ``format: json`` swaps in a JSON formatter so log-based
+observability stacks (Loki, Cloudwatch, etc.) can parse without OTLP setup.
+Lives in this module for code locality.
 """
 from __future__ import annotations
 
@@ -176,8 +178,8 @@ class _JsonFormatter(_logging.Formatter):
     """Minimal JSON log formatter for log-based observability stacks.
 
     Emits one JSON object per line with fields name, level, message,
-    timestamp. Extra fields can be attached to log records via
-    ``logger.info(msg, extra={"key": val})``.
+    timestamp, and (when set) the originating host. Extra fields can be
+    attached to log records via ``logger.info(msg, extra={"key": val})``.
     """
 
     _STD_RESERVED = {
@@ -188,6 +190,10 @@ class _JsonFormatter(_logging.Formatter):
         "asctime", "taskName",
     }
 
+    def __init__(self, host: str | None = None):
+        super().__init__()
+        self._host = host
+
     def format(self, record: _logging.LogRecord) -> str:
         payload = {
             "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
@@ -195,6 +201,8 @@ class _JsonFormatter(_logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        if self._host:
+            payload["host"] = self._host
         for k, v in record.__dict__.items():
             if k in self._STD_RESERVED or k.startswith("_"):
                 continue
@@ -206,18 +214,102 @@ class _JsonFormatter(_logging.Formatter):
         return _json.dumps(payload)
 
 
-def configure_structured_logging_if_requested() -> bool:
-    """If ``REFLEXES_LOG_FORMAT=json``, install JSON formatter on root.
+_LEVEL_MAP = {
+    "error": _logging.ERROR,
+    "warning": _logging.WARNING,
+    "info": _logging.INFO,
+    "debug": _logging.DEBUG,
+}
+_SILENT = _logging.CRITICAL + 1  # above every real level → nothing emits
 
-    Idempotent: re-running replaces the active formatter on existing
-    handlers rather than stacking. Returns True if structured mode is
-    active. Called from integrations at startup so they pick up the
-    env-var directive without each one re-implementing the swap.
+_LOGGING_CONFIGURED = False
+
+
+def _open_secure_logfile(path: str):
+    """Return a FileHandler whose backing file is owner-only (0o600), created
+    atomically at that mode before any write. Returns None if it can't open."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        os.close(fd)
+        try:
+            os.chmod(path, 0o600)  # tighten if it pre-existed wider
+        except OSError:
+            pass
+        return _logging.FileHandler(path)
+    except OSError:
+        return None
+
+
+def configure_logging(
+    config_file="reflexes.yaml",
+    *,
+    log_file: str | None = None,
+    stream=None,
+    host: str | None = None,
+    force: bool = False,
+):
+    """Configure Reflexes diagnostic logging from reflexes.yaml's ``logging:``
+    block — the single, host-agnostic logging entry point.
+
+    - level ``off``/``none`` → nothing is emitted (and no log file is created).
+    - Otherwise the ``reflexes`` logger tree is set to the level. Message
+      CONTENT is only ever logged at DEBUG, so the WARNING default surfaces
+      enforcement problems (fail-open, evaluator errors) and ``log``-action
+      hits without capturing any user content.
+    - ``log_file`` (Claude Code / subprocess hooks): also attach an owner-only
+      file handler at the level. ``stream`` (e.g. the Hermes shell hook passing
+      ``sys.stderr``): attach a stream handler instead — needed because Python's
+      last-resort handler only emits WARNING+, so without one a subprocess's
+      ``debug`` level would never surface. In-process SDK hosts pass neither and
+      inherit the app's handlers; emission is still gated by the logger level.
+    - ``host`` prefixes every record with the originating host (e.g. ``[codex]``
+      in text, a ``host`` field in JSON). Multiple subprocess hooks on one
+      machine share a log file — Codex reuses the Claude Code hook and writes to
+      the same ``debug.log`` — so the tag is what tells their lines apart.
+    - format ``json`` swaps in the structured formatter for log-aggregation.
+
+    Guarded: the first caller wins unless a later caller passes ``force=True``.
+    The Claude Code hook forces (it owns the file); ``configure_from_file``
+    (which every host funnels through) does not — so the file-owning path is
+    never clobbered by the generic one.
     """
-    if os.environ.get("REFLEXES_LOG_FORMAT", "").lower() != "json":
-        return False
-    formatter = _JsonFormatter()
-    root = _logging.getLogger()
-    for handler in root.handlers:
+    global _LOGGING_CONFIGURED
+    if _LOGGING_CONFIGURED and not force:
+        return None
+    from reflexes.config import read_log_settings
+    level_str, fmt = read_log_settings(config_file)
+    rlog = _logging.getLogger("reflexes")
+
+    # Idempotent re-config: drop any file handler we attached before.
+    for h in list(rlog.handlers):
+        if getattr(h, "_reflexes_owned", False):
+            rlog.removeHandler(h)
+
+    if level_str in ("off", "none"):
+        rlog.setLevel(_SILENT)  # suppresses every record regardless of handlers
+        _LOGGING_CONFIGURED = True
+        return level_str
+
+    level = _LEVEL_MAP.get(level_str, _logging.WARNING)
+    rlog.setLevel(level)
+    host_tag = f"[{host}] " if host else ""
+    formatter = _JsonFormatter(host=host) if fmt == "json" else _logging.Formatter(
+        f"%(asctime)s {host_tag}%(name)s %(levelname)s: %(message)s"
+    )
+    handler = None
+    if log_file:
+        handler = _open_secure_logfile(log_file)
+    elif stream is not None:
+        handler = _logging.StreamHandler(stream)
+    if handler is not None:
+        handler.setLevel(level)
         handler.setFormatter(formatter)
-    return True
+        handler._reflexes_owned = True
+        rlog.addHandler(handler)
+        rlog.propagate = False  # our handler is the sink; don't double to root
+    elif fmt == "json":
+        # In-process host: restyle whatever handlers the app already installed.
+        for h in _logging.getLogger().handlers:
+            h.setFormatter(formatter)
+    _LOGGING_CONFIGURED = True
+    return level_str

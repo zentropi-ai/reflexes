@@ -65,37 +65,11 @@ SESSION_TTL_SECS = 24 * 60 * 60  # 24 hours; vacuumed on Stop hooks
 _ensure_secure_dir(CACHE_DIR)
 _ensure_secure_dir(SESSIONS_DIR)
 
-# Atomic-perms create for the debug log: open with O_CREAT + 0o600 so
-# the file's mode is owner-only at first byte, before any handler writes.
-# logging.basicConfig with default opener would create the file at 0o644
-# and only the directory perms (0o700) gate access — defense-in-depth
-# wants both layers.
-try:
-    _logfile_fd = os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    os.close(_logfile_fd)
-    # Fix perms in case the file pre-existed at a wider mode.
-    try:
-        os.chmod(LOG_FILE, 0o600)
-    except OSError:
-        pass
-except OSError:
-    # If we can't pre-create, fall through to logging.basicConfig which
-    # will create on first emit; perms may be 0o644 in that case but
-    # the directory is still 0o700.
-    pass
-
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
-)
-
-# Honor REFLEXES_LOG_FORMAT=json so log-based observability stacks
-# (Loki, Cloudwatch, etc.) can parse structured records without OTLP.
-# Idempotent — re-runs replace formatters on existing handlers rather
-# than stacking. No-op when the env var isn't set.
-from reflexes.observability import configure_structured_logging_if_requested as _cfg_log
-_cfg_log()
+# Diagnostic logging (level, format, on/off, the owner-only file handler at
+# LOG_FILE) is configured from reflexes.yaml's `logging:` block by
+# observability.configure_logging, called with force=True at the top of main()
+# once --config is known. Until then the package-level WARNING floor (set in
+# reflexes/__init__.py) applies, so nothing verbose leaks during import.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("reflexes.claude_code")
@@ -675,7 +649,7 @@ def _session_start_update_output() -> dict:
     }
 
 
-def main():
+def main(host: str = "claude-code"):
     parser = argparse.ArgumentParser(description="Reflexes Claude Code hook")
     parser.add_argument("--config", default="reflexes.yaml", help="Path to reflexes.yaml")
     parser.add_argument("--reflexes", default="", help="Comma-separated config group names")
@@ -685,6 +659,13 @@ def main():
 
     # Add project root to path so reflexes package is importable
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    # Configure diagnostic logging from the `logging:` block FIRST, before any
+    # content-bearing line runs. force=True because this hook owns the on-disk
+    # log file (LOG_FILE); the generic configure_from_file call below must not
+    # clobber that. Default level is WARNING → no user content captured.
+    from reflexes.observability import configure_logging
+    configure_logging(args.config, log_file=LOG_FILE, host=host, force=True)
 
     import asyncio
     import reflexes.core as _core

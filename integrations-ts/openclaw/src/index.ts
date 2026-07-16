@@ -25,6 +25,49 @@ import { parseRef, resolveCriteria, type PolicyRef } from "./policy.js";
 export { parseRef, resolveCriteria, stripFrontmatter, PolicyNotFound, _internal as policyInternal } from "./policy.js";
 export type { PolicyRef } from "./policy.js";
 
+// ---- Diagnostic logging (config-driven, matches the Python regime) --------
+// Level + format come from the `logging:` block in reflexes.yaml — no env
+// vars. Default WARNING captures operational events (fail-open notices, skips,
+// `log`-action hits) with no message content; message CONTENT is emitted ONLY
+// at `debug` (via rxdebug), mirroring the Python hook. `off` silences all,
+// `json` structures. Every line is host-tagged (`openclaw`) so it stays
+// attributable in aggregated/shared logs.
+const _LOG_ORDER: Record<string, number> = { off: 0, error: 1, warning: 2, info: 3, debug: 4 };
+const _LOG_HOST = "openclaw";
+let _logThreshold = _LOG_ORDER.warning;
+let _logFormat: "text" | "json" = "text";
+
+function configureLogging(doc: Record<string, unknown> | null): void {
+  const block = ((doc?.logging ?? {}) as Record<string, unknown>) || {};
+  const level = String(block.level ?? "warning").trim().toLowerCase();
+  const fmt = String(block.format ?? "text").trim().toLowerCase();
+  // Fail safe: an unknown level never resolves more verbose than the default.
+  _logThreshold = level in _LOG_ORDER ? _LOG_ORDER[level] : _LOG_ORDER.warning;
+  _logFormat = fmt === "json" ? "json" : "text";
+}
+
+// All Reflexes plugin logs funnel through here so the config level/format/host
+// govern them uniformly.
+function _emit(levelName: string, levelNum: number, msg: string): void {
+  if (levelNum > _logThreshold) return;
+  if (_logFormat === "json") {
+    console.warn(JSON.stringify({ level: levelName, logger: "reflexes", host: _LOG_HOST, message: msg }));
+  } else {
+    console.warn(`[${_LOG_HOST}] ${msg}`);
+  }
+}
+function rxwarn(msg: string): void {
+  _emit("WARNING", _LOG_ORDER.warning, msg);
+}
+// Content-bearing lines go here — gated at debug so nothing sensitive is
+// captured unless the operator opts in (parity with the Python hook).
+function rxdebug(msg: string): void {
+  _emit("DEBUG", _LOG_ORDER.debug, msg);
+}
+function _truncForLog(s: string, n = 200): string {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
 export type ReflexAction = "deny" | "flag" | "log";
 
 export interface ReflexBinding {
@@ -112,12 +155,15 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
       continue;
     }
     const doc = parseYaml(raw) as Record<string, unknown>;
+    // Set the logging level/format from the `logging:` block before we emit
+    // anything, so `off` can silence even the DISABLED notice below.
+    configureLogging(doc);
     // Global kill switch: a top-level `enabled: false` turns the whole system
     // off — no bindings load, every hook no-ops. Say so loudly (the doctor is the
     // Python-side loud surface; this is OpenClaw's).
     const disabled = doc?.enabled === false;
     if (disabled) {
-      console.warn(
+      rxwarn(
         `[reflexes] DISABLED — \`enabled: false\` in ${path}; NO policies are enforced. ` +
           "Set `enabled: true` (or remove the line) and restart to re-enable.",
       );
@@ -138,7 +184,7 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
           entry.trigger !== "before_tool_call" &&
           entry.trigger !== "before_response"
         ) {
-          console.warn(
+          rxwarn(
             `[reflexes] policy "${entry.name ?? entry.policy}" binds trigger ` +
               `"${entry.trigger}", which OpenClaw can't enforce (after_tool_call is ` +
               `observe-only) — skipping. Use before_tool_call for tool-side enforcement.`,
@@ -153,7 +199,7 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
           entry.name ??
           (ref.scheme === "file" ? ref.locator.split("/").pop()?.replace(/\.md$/, "") : undefined);
         if (!name) {
-          console.warn(`[reflexes] binding for '${entry.policy}' is missing 'name', skipping`);
+          rxwarn(`[reflexes] binding for '${entry.policy}' is missing 'name', skipping`);
           continue;
         }
         // Read local files eagerly (fail-fast, no async at load). Hosted refs
@@ -165,7 +211,7 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
           try {
             criteria = extractCriteria(readFileSync(policyPath, "utf8"));
           } catch {
-            console.warn(`[reflexes] policy not readable, skipping: ${policyPath}`);
+            rxwarn(`[reflexes] policy not readable, skipping: ${policyPath}`);
             continue;
           }
         }
@@ -1158,6 +1204,7 @@ export async function checkToolCall(
     opts.taskContext?.standingInstructions ?? resolveStandingInstructions(opts.cwd ?? process.cwd());
   const context = assembleTaskContext({ currentRequest, originalTask, standingInstructions }) || null;
   const content = assembleContent(toolCallContent(event), context, "Tool call", "Task context");
+  rxdebug(`before_tool_call: evaluating ${event.toolName} (${content.length} chars): ${_truncForLog(content)}`);
   // Evaluate all bound policies in parallel (cap: REFLEXES_MAX_CONCURRENT,
   // default 10), then apply results in binding order — first deny wins.
   const verdicts = await mapWithConcurrency(
@@ -1171,7 +1218,7 @@ export async function checkToolCall(
         // Policy unavailable (missing/unreachable hosted policy) → fail-open,
         // skip this binding. policy_cache already falls back to a stale copy on
         // a transient refetch failure, so this only fires on a cold miss.
-        console.warn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
+        rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
         return null;
       }
       try {
@@ -1186,7 +1233,7 @@ export async function checkToolCall(
           rememberUpgradeNotice(opts.sessionKey, err.userNotice);
           opts.onFailOpenUpgrade?.(err);
         }
-        console.warn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
+        rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
         return null;
       }
     },
@@ -1194,12 +1241,16 @@ export async function checkToolCall(
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i];
     const verdict = verdicts[i];
+    rxdebug(
+      `before_tool_call: policy ${binding.name} → label=${verdict?.label ?? "null"}` +
+        (verdict?.confidence !== undefined ? ` confidence=${verdict.confidence}` : ""),
+    );
     if (!verdict || verdict.label !== "1") continue;
     if (binding.action === "deny") {
       return { block: true, blockReason: denyReason(binding) };
     }
     // flag / log: surface without blocking.
-    console.warn(
+    rxwarn(
       `[reflexes] ${binding.action}: tool call ${event.toolName} matched policy ${binding.name}` +
         (verdict.confidence !== undefined ? ` (confidence ${verdict.confidence})` : ""),
     );
@@ -1235,6 +1286,7 @@ export async function checkResponse(
       .filter((s): s is string => Boolean(s && s.trim()))
       .join("\n\n") || null;
   const content = assembleContent(response, context, "Agent response", "Task context");
+  rxdebug(`before_response: evaluating response (${content.length} chars): ${_truncForLog(content)}`);
   const verdicts = await mapWithConcurrency(
     bindings,
     maxConcurrent(),
@@ -1246,7 +1298,7 @@ export async function checkResponse(
         // Policy unavailable (missing/unreachable hosted policy) → fail-open,
         // skip this binding. policy_cache already falls back to a stale copy on
         // a transient refetch failure, so this only fires on a cold miss.
-        console.warn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
+        rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
         return null;
       }
       try {
@@ -1256,7 +1308,7 @@ export async function checkResponse(
           rememberUpgradeNotice(opts.sessionKey, err.userNotice);
           opts.onFailOpenUpgrade?.(err);
         }
-        console.warn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
+        rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
         return null;
       }
     },
@@ -1264,6 +1316,10 @@ export async function checkResponse(
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i];
     const verdict = verdicts[i];
+    rxdebug(
+      `before_response: policy ${binding.name} → label=${verdict?.label ?? "null"}` +
+        (verdict?.confidence !== undefined ? ` confidence=${verdict.confidence}` : ""),
+    );
     if (!verdict || verdict.label !== "1") continue;
     if (binding.action === "deny") {
       return {
@@ -1273,7 +1329,7 @@ export async function checkResponse(
       };
     }
     // flag / log: surface without blocking (return nothing = accept finalize).
-    console.warn(
+    rxwarn(
       `[reflexes] ${binding.action}: response matched policy ${binding.name}` +
         (verdict.confidence !== undefined ? ` (confidence ${verdict.confidence})` : ""),
     );
@@ -1303,6 +1359,7 @@ export async function checkInput(
     if (bindings.length === 0) return { outcome: "pass" };
     const content = typeof event.prompt === "string" ? event.prompt : "";
     if (!content.trim()) return { outcome: "pass" };
+    rxdebug(`on_input: evaluating prompt (${content.length} chars): ${_truncForLog(content)}`);
     // on_input: the content IS the request — no extra task context to assemble.
     const verdicts = await mapWithConcurrency(
       bindings,
@@ -1312,7 +1369,7 @@ export async function checkInput(
         try {
           criteria = await resolveBindingCriteria(binding, opts.fetchImpl);
         } catch (err) {
-          console.warn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
+          rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
           return null;
         }
         try {
@@ -1322,7 +1379,7 @@ export async function checkInput(
             rememberUpgradeNotice(opts.sessionKey, err.userNotice);
             opts.onFailOpenUpgrade?.(err);
           }
-          console.warn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
+          rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
           return null;
         }
       },
@@ -1330,6 +1387,10 @@ export async function checkInput(
     for (let i = 0; i < bindings.length; i++) {
       const binding = bindings[i];
       const verdict = verdicts[i];
+      rxdebug(
+        `on_input: policy ${binding.name} → label=${verdict?.label ?? "null"}` +
+          (verdict?.confidence !== undefined ? ` confidence=${verdict.confidence}` : ""),
+      );
       if (!verdict || verdict.label !== "1") continue;
       if (binding.action === "deny") {
         // Block the prompt before the model runs. `reason` is internal; `message`
@@ -1337,7 +1398,7 @@ export async function checkInput(
         return { outcome: "block", reason: `reflexes: ${binding.name}`, message: denyReason(binding, "request") };
       }
       // flag / log: surface without blocking.
-      console.warn(
+      rxwarn(
         `[reflexes] ${binding.action}: input matched policy ${binding.name}` +
           (verdict.confidence !== undefined ? ` (confidence ${verdict.confidence})` : ""),
       );
@@ -1346,7 +1407,7 @@ export async function checkInput(
     return { outcome: "pass" };
   } catch (err) {
     // Never throw — a thrown/void return is fail-CLOSED (blocks the prompt).
-    console.warn(`[reflexes] on_input check failed (fail-open): ${String(err)}`);
+    rxwarn(`[reflexes] on_input check failed (fail-open): ${String(err)}`);
     return { outcome: "pass" };
   }
 }
@@ -1365,7 +1426,7 @@ const entry = {
   register(api: OpenClawPluginApi): void {
     const config = loadConfig(process.env.REFLEXES_CONFIG);
     if (!config) {
-      console.warn(
+      rxwarn(
         "[reflexes] no reflexes.yaml found (~/.reflexes/reflexes.yaml or ./reflexes.yaml); plugin idle",
       );
     }

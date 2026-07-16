@@ -20,7 +20,8 @@ Initial public release.
   and `before_response` — covering every agent decision point.
 - **Three actions** — `deny` (block and surface the policy text to the
   agent so it can self-correct), `flag` (allow, but make the verdict
-  observable), and `log` (allow, log at INFO).
+  observable), and `log` (allow, but record the verdict in the diagnostic
+  log).
 - **Self-correction protocol.** On `deny`, the policy criteria text is
   fed back to the agent through the framework's native rejection
   mechanism so it revises on its next turn.
@@ -44,11 +45,21 @@ Initial public release.
   (`github:<owner>/<repo>/<path>@<tag-or-sha>`). Hosted policies are fetched
   and cached (pinned refs permanently, unpinned on a TTL) and work with any
   evaluator. Each binding now requires a `name`.
+- **Global `enabled` switch.** A top-level `enabled: false` in
+  `reflexes.yaml` disables all enforcement system-wide (no bindings load,
+  every hook allows, no evaluator calls) without uninstalling or editing
+  bindings. Absent/unrecognized values stay enabled (fail safe); `reflexes
+  doctor` reports the disabled state loudly.
+- **Config-driven logging** via the `logging:` block (`level` +
+  `format`) — no environment variables. The default level is `warning`,
+  which records enforcement problems and `log`-action hits but never
+  message content (content is `debug`-only), so nothing sensitive is
+  captured by default; `off` silences everything, `format: json` emits
+  structured records for log-aggregation stacks.
 - **OpenTelemetry observability** (optional `[otel]` extra): the
   `reflexes.evaluate` span, the `reflexes.verdicts` counter, and the
-  `reflexes.latency` histogram, plus JSON structured logging via
-  `REFLEXES_LOG_FORMAT=json`.
+  `reflexes.latency` histogram.
 - **`reflexes doctor`** command to verify an installation (config
-  parses, evaluator reachable, hooks present).
+  parses, evaluator reachable, hooks present, logging posture).
 
 [0.1.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.0

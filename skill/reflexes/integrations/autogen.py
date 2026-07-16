@@ -166,7 +166,7 @@ def create_intervention_handler(
                         binding.policy.name, verdict.confidence, content[:80],
                     )
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched (confidence=%.2f): %s",
                         binding.policy.name, verdict.confidence, content[:80],
                     )

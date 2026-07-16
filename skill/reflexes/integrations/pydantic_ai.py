@@ -206,7 +206,7 @@ def apply_reflexes(
                             binding.policy.name, verdict.confidence,
                         )
                     elif binding.action == "log":
-                        logger.info(
+                        logger.warning(
                             "Reflex %s matched input (confidence=%.2f)",
                             binding.policy.name, verdict.confidence,
                         )
@@ -270,7 +270,7 @@ def apply_reflexes(
                         binding.policy.name, verdict.confidence,
                     )
                 elif binding.action == "log":
-                        logger.info(
+                        logger.warning(
                             "Reflex %s matched output (confidence=%.2f)",
                             binding.policy.name, verdict.confidence,
                         )
@@ -350,7 +350,7 @@ def make_args_validator(
                         binding.policy.name, verdict.confidence,
                     )
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched tool args (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )

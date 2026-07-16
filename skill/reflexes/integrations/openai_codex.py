@@ -17,8 +17,14 @@ Hook config goes in hooks.json:
   Project level: <repo>/.codex/hooks.json
 """
 
-# Codex uses the same hook protocol as Claude Code.
-from reflexes.integrations.claude_code import main
+# Codex uses the same hook protocol as Claude Code — reuse its main, but tag
+# log lines as `codex` (Codex and Claude Code on one machine share debug.log).
+from reflexes.integrations.claude_code import main as _cc_main
+
+
+def main(host: str = "codex"):
+    _cc_main(host=host)
+
 
 if __name__ == "__main__":
     main()

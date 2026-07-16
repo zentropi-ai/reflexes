@@ -32,7 +32,6 @@ Create `~/.reflexes/reflexes.yaml` — the same config every Reflexes host share
 and bind policies to triggers:
 
 ```yaml
-enabled: true   # optional global on/off; set false to disable ALL enforcement. Absent = enabled (safe default).
 reflexes:
   default:
     - policy: ./policies/Unconfirmed-Destructive-Action.md
@@ -48,6 +47,12 @@ evaluators:
     type: zentropi
     model: cope-latest
     api_key_env: ZENTROPI_API_KEY
+
+# --- Operational settings (optional; safe defaults) ---
+enabled: true      # global on/off; false disables ALL enforcement. Absent = enabled.
+logging:
+  level: warning   # off | error | warning (default) | info | debug — content ONLY ever at debug
+  format: text     # text | json
 ```
 
 Set `ZENTROPI_API_KEY` in the gateway environment and restart the gateway.

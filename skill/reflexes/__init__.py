@@ -1,5 +1,15 @@
 """Reflexes — System 1 for AI agents."""
 
+import logging as _logging
+
+# Safe logging floor, applied the instant the package is imported and before
+# any config is read: the `reflexes` logger tree defaults to WARNING, so
+# message content (which is only ever logged at DEBUG) is never captured
+# until an operator opts in via the `logging:` block in reflexes.yaml.
+# configure_logging() (called through configure_from_file / the Claude Code
+# hook) adjusts this per config.
+_logging.getLogger("reflexes").setLevel(_logging.WARNING)
+
 # Version comes from the bundled _version.py (works for the on-disk bundled
 # runtime, which has no package metadata) and falls back to dist metadata.
 try:

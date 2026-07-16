@@ -82,7 +82,7 @@ def _make_kickoff_callback(bindings: list[ReflexBinding]):
                         binding.policy.name, verdict.confidence,
                     )
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched input (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )
@@ -109,7 +109,7 @@ def _make_task_guardrail(bindings: list[ReflexBinding]):
             elif binding.action == "flag":
                 logger.warning("Reflex %s flagged output (confidence=%.2f)", binding.policy.name, verdict.confidence)
             elif binding.action == "log":
-                logger.info("Reflex %s matched output (confidence=%.2f)", binding.policy.name, verdict.confidence)
+                logger.warning("Reflex %s matched output (confidence=%.2f)", binding.policy.name, verdict.confidence)
 
         return (True, output)
 
@@ -131,7 +131,7 @@ def _make_before_tool_hook(bindings: list[ReflexBinding]):
             elif binding.action == "flag":
                 logger.warning("Reflex %s flagged tool %s (confidence=%.2f)", binding.policy.name, context.tool_name, verdict.confidence)
             elif binding.action == "log":
-                logger.info("Reflex %s matched tool %s (confidence=%.2f)", binding.policy.name, context.tool_name, verdict.confidence)
+                logger.warning("Reflex %s matched tool %s (confidence=%.2f)", binding.policy.name, context.tool_name, verdict.confidence)
 
         return None  # Allow
 
@@ -157,7 +157,7 @@ def _make_after_tool_hook(bindings: list[ReflexBinding]):
                     binding.policy.name, context.tool_name, verdict.confidence,
                 )
             elif binding.action == "log":
-                logger.info(
+                logger.warning(
                         "Reflex %s matched tool output from %s (confidence=%.2f)",
                         binding.policy.name, context.tool_name, verdict.confidence,
                     )

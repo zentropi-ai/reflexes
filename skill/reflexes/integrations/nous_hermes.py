@@ -296,7 +296,7 @@ async def _check_bindings(
         elif binding.action == "flag":
             logger.warning(log_msg)
         else:
-            logger.info(log_msg)
+            logger.warning(log_msg)
         findings.append({
             "policy": binding.policy.name,
             "action": binding.action,

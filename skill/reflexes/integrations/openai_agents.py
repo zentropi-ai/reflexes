@@ -65,7 +65,7 @@ def _handle_verdict(binding: ReflexBinding, verdict) -> tuple[bool, dict | None]
         return False, info
 
     if binding.action == "log":
-        logger.info(
+        logger.warning(
             "Reflex %s matched (confidence=%.2f): %s",
             binding.policy.name, verdict.confidence,
             verdict.reason or "",

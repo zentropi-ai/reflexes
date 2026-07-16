@@ -151,7 +151,6 @@ The install ships six **starter policies**, ready to use, in two groups:
 where. Here is an example:
 
 ```yaml
-enabled: true   # optional global on/off; set false to disable ALL enforcement. Absent = enabled (safe default).
 reflexes:
   default:
     - policy: ./policies/Unconfirmed-Destructive-Action.md
@@ -168,6 +167,12 @@ evaluators:
     type: zentropi
     model: cope-latest
     api_key_env: ZENTROPI_API_KEY
+
+# --- Operational settings (optional; safe defaults) ---
+enabled: true      # global on/off; false disables ALL enforcement. Absent = enabled.
+logging:
+  level: warning   # off | error | warning (default) | info | debug — content ONLY ever at debug
+  format: text     # text | json
 ```
 
 The `default` group always applies. Add named groups (e.g. `customer-comms`,
@@ -254,7 +259,7 @@ method and worked examples, and [`SPEC.md`](./SPEC.md) §3 for the format spec.
 |---|---|
 | `deny` | Block the operation. Surface the policy criteria text to the agent so it can self-correct. |
 | `flag` | Allow the operation. Make the verdict observable (logs, structured metadata, framework-native state). |
-| `log` | Allow the operation. Log at INFO. |
+| `log` | Allow the operation. Record the verdict in the diagnostic log (visible at the default level). |
 
 See [`SPEC.md`](./SPEC.md) §5–§7 for normative semantics.
 
@@ -372,9 +377,10 @@ configured (Datadog, Honeycomb, Grafana/Loki, …):
   from evaluator errors, so dashboards can split product signal from infra noise;
 - a **latency histogram** per evaluation.
 
-For log-based stacks without OTLP ingest, set `REFLEXES_LOG_FORMAT=json` to emit
-structured JSON logs. The full instrumentation surface (for custom collectors)
-lives in `reflexes.observability`.
+For log-based stacks without OTLP ingest, set `logging.format: json` in
+`reflexes.yaml` to emit structured JSON logs (and `logging.level` to control
+verbosity — see [Configuration](#configuration)). The full instrumentation
+surface (for custom collectors) lives in `reflexes.observability`.
 
 ## Documentation
 

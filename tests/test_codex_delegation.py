@@ -1,11 +1,11 @@
 """Tests for the OpenAI Codex integration.
 
 Codex shares Claude Code's hook protocol — JSON on stdin, JSON on
-stdout. The Reflexes integration is a 24-line delegator: it reuses
-``reflexes.integrations.claude_code.main`` as-is. These tests verify
-the delegation is intact AND that invoking the module as a script
-behaves the same as the Claude Code module under a synthetic Codex
-hook payload.
+stdout. The Reflexes integration is a thin delegator: it reuses
+``reflexes.integrations.claude_code.main``, passing host='codex' so the
+shared log file stays attributable. These tests verify the delegation is
+intact AND that invoking the module as a script behaves the same as the
+Claude Code module under a synthetic Codex hook payload.
 """
 from __future__ import annotations
 
@@ -20,16 +20,19 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_codex_main_is_claude_code_main():
-    """The module-level `main` import points at Claude Code's main —
-    no diverging behavior, no separate code path to maintain.
+def test_codex_main_delegates_to_claude_code_with_host_tag(monkeypatch):
+    """Codex reuses Claude Code's `main` (no separate code path) but tags its
+    log lines as `codex` — the two hooks can share one `debug.log` on a machine,
+    so the host tag is what tells their records apart. Verify the thin wrapper
+    delegates and passes host='codex'.
     """
-    from reflexes.integrations.openai_codex import main as codex_main
-    from reflexes.integrations.claude_code import main as cc_main
-    assert codex_main is cc_main, (
-        "openai_codex.main must be the same object as claude_code.main; "
-        "if Codex needs divergent behavior, that's a v0.2 design choice "
-        "with its own integration file, not a quiet alias break."
+    import reflexes.integrations.openai_codex as codex
+
+    captured = {}
+    monkeypatch.setattr(codex, "_cc_main", lambda host="claude-code": captured.setdefault("host", host))
+    codex.main()
+    assert captured["host"] == "codex", (
+        "openai_codex.main must delegate to claude_code.main tagged host='codex'"
     )
 
 

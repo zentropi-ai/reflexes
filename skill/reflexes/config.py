@@ -45,6 +45,49 @@ def is_enabled(config_file: str | Path = "reflexes.yaml") -> bool:
         return True
 
 
+# Diagnostic logging is configured entirely from the `logging:` block in
+# reflexes.yaml (no env vars). The default is WARNING — enough to surface
+# enforcement problems (fail-open, evaluator errors) and `log`-action hits,
+# but NOT message content, which is only ever emitted at DEBUG. `off` silences
+# everything. Unknown values fail safe to the default (never accidentally
+# verbose).
+VALID_LOG_LEVELS = {"off", "none", "error", "warning", "info", "debug"}
+VALID_LOG_FORMATS = {"text", "json"}
+DEFAULT_LOG_LEVEL = "warning"
+DEFAULT_LOG_FORMAT = "text"
+
+
+def _log_settings_from_raw(raw: dict) -> tuple[str, str]:
+    """Extract `(level, format)` from a raw config dict, normalized and
+    validated. Anything malformed falls back to the safe defaults — an
+    unreadable `logging:` block must never leave content capture on."""
+    block = raw.get("logging") if isinstance(raw, dict) else None
+    if not isinstance(block, dict):
+        return DEFAULT_LOG_LEVEL, DEFAULT_LOG_FORMAT
+    # YAML 1.1 parses `off`/`no` as the boolean False — the user meant the
+    # `off` level, so honor it. `on`/`yes` (True) map to nothing sensible and
+    # fall through to the default. `format: off` isn't meaningful, so only the
+    # level gets the boolean coercion.
+    raw_level = block.get("level", DEFAULT_LOG_LEVEL)
+    level = "off" if raw_level is False else str(raw_level).strip().lower()
+    fmt = str(block.get("format", DEFAULT_LOG_FORMAT)).strip().lower()
+    if level not in VALID_LOG_LEVELS:
+        level = DEFAULT_LOG_LEVEL
+    if fmt not in VALID_LOG_FORMATS:
+        fmt = DEFAULT_LOG_FORMAT
+    return level, fmt
+
+
+def read_log_settings(config_file: str | Path = "reflexes.yaml") -> tuple[str, str]:
+    """Read `(level, format)` from reflexes.yaml's `logging:` block. Defaults to
+    `("warning", "text")`; a read/parse error never raises and never returns a
+    more-verbose level than the default (fail safe — stay quiet)."""
+    try:
+        return _log_settings_from_raw(_load_raw(config_file))
+    except Exception:
+        return DEFAULT_LOG_LEVEL, DEFAULT_LOG_FORMAT
+
+
 def load_config(
     reflexes: list[str],
     config_file: str | Path = "reflexes.yaml",
@@ -123,6 +166,14 @@ def configure_from_file(config_file: str | Path = "reflexes.yaml"):
             api_key_env: GROQ_API_KEY
     """
     from reflexes.core import configure
+
+    # Configure diagnostic logging from the `logging:` block. This is the
+    # setup chokepoint every host funnels through, so wiring it here gives
+    # a uniform logging regime across all hosts with one call. Guarded so an
+    # entrypoint that owns a log file (the Claude Code hook) can configure
+    # first with force=True and win; here we never force.
+    from reflexes.observability import configure_logging
+    configure_logging(config_file)
 
     path = Path(config_file)
     if not path.exists():

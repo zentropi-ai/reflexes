@@ -97,7 +97,7 @@ def _make_task_callback(bindings: list[ReflexBinding]):
                         binding.policy.name, verdict.confidence,
                     )
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched input (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )
@@ -133,7 +133,7 @@ def _make_action_callback(bindings: list[ReflexBinding]):
                             binding.policy.name, tool_call.name, verdict.confidence,
                         )
                     elif binding.action == "log":
-                        logger.info(
+                        logger.warning(
                             "Reflex %s matched tool output from %s (confidence=%.2f)",
                             binding.policy.name, tool_call.name, verdict.confidence,
                         )
@@ -163,7 +163,7 @@ def _make_final_answer_check(bindings: list[ReflexBinding]):
             elif binding.action == "flag":
                 logger.warning("Reflex %s flagged output (confidence=%.2f)", binding.policy.name, verdict.confidence)
             elif binding.action == "log":
-                logger.info("Reflex %s matched output (confidence=%.2f)", binding.policy.name, verdict.confidence
+                logger.warning("Reflex %s matched output (confidence=%.2f)", binding.policy.name, verdict.confidence
                     )
 
         return True
@@ -221,7 +221,7 @@ def apply_reflexes(
                 elif binding.action == "flag":
                     logger.warning("Reflex %s flagged input (confidence=%.2f)", binding.policy.name, verdict.confidence)
                 elif binding.action == "log":
-                    logger.info("Reflex %s matched input (confidence=%.2f)", binding.policy.name, verdict.confidence)
+                    logger.warning("Reflex %s matched input (confidence=%.2f)", binding.policy.name, verdict.confidence)
             return original_run(task, *args, **kwargs)
 
         agent.run = _wrapped_run

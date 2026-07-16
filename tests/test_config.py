@@ -157,6 +157,61 @@ def test_only_literal_false_disables_garbled_values_stay_on(tmp_path):
         cfg.unlink(); (tmp_path / "policies" / "p.md").unlink(); (tmp_path / "policies").rmdir()
 
 
+def test_read_log_settings_defaults_and_parsing(tmp_path):
+    from reflexes.config import read_log_settings
+    # Absent logging: block → safe defaults.
+    assert read_log_settings(_min_config(tmp_path, "")) == ("warning", "text")
+    (tmp_path / "reflexes.yaml").unlink()
+    (tmp_path / "policies" / "p.md").unlink(); (tmp_path / "policies").rmdir()
+    # Explicit values are read and normalized (case-insensitive).
+    cfg = _min_config(tmp_path, "logging:\n  level: DEBUG\n  format: JSON\n")
+    assert read_log_settings(cfg) == ("debug", "json")
+
+
+def test_read_log_settings_fails_safe(tmp_path):
+    """A garbled level/format, or an unreadable file, must never yield a
+    more-verbose level than the WARNING default."""
+    from reflexes.config import read_log_settings
+    cfg = _min_config(tmp_path, "logging:\n  level: chatty\n  format: yaml\n")
+    assert read_log_settings(cfg) == ("warning", "text")
+    assert read_log_settings(tmp_path / "nope.yaml") == ("warning", "text")
+
+
+def test_no_content_logged_above_debug():
+    """INVARIANT: message content is only ever emitted at DEBUG. No logger call
+    at INFO or above may pass the evaluated content or assembled user/task
+    context. Guards the safety promise behind the WARNING default."""
+    import re
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parent.parent / "skill" / "reflexes"
+    # logger.info/warning/error/critical/exception(...) lines that reference a
+    # content-bearing variable name are forbidden.
+    call = re.compile(r"\.(info|warning|error|critical|exception)\(", re.I)
+    content_var = re.compile(r"\b(content|user_context|task_context|raw_input)\b")
+    offenders = []
+    for py in root.rglob("*.py"):
+        for i, line in enumerate(py.read_text().splitlines(), 1):
+            if call.search(line) and content_var.search(line):
+                offenders.append(f"{py.relative_to(root)}:{i}: {line.strip()}")
+    assert not offenders, "content must be DEBUG-only; offending log calls:\n" + "\n".join(offenders)
+
+
+def test_log_action_surfaces_at_warning_not_info():
+    """INVARIANT: the `log` action must emit at WARNING, not INFO. The default
+    logging level is WARNING, so an INFO `log`-action record would be silently
+    swallowed — defeating the action. Guard: no integration logs a policy
+    `matched` line at INFO."""
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parent.parent / "skill" / "reflexes" / "integrations"
+    offenders = []
+    for py in root.glob("*.py"):
+        lines = py.read_text().splitlines()
+        for i, line in enumerate(lines):
+            if "logger.info(" in line and "matched" in " ".join(lines[i:i + 3]):
+                offenders.append(f"{py.name}:{i + 1}")
+    assert not offenders, "log-action must emit at WARNING, not INFO:\n" + "\n".join(offenders)
+
+
 def test_load_default_only(config_dir):
     os.chdir(config_dir)
     bindings = load_config(reflexes=[], config_file="reflexes.yaml")

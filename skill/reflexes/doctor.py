@@ -51,6 +51,22 @@ def _check_config(config_path: Path | None, groups: list[str]) -> tuple[str, str
     return (_OK, f"{config_path}: {len(bindings)} binding(s) — {summary}", bindings)
 
 
+def _check_logging(config_path: Path | None) -> tuple[str, str]:
+    """Report the diagnostic logging posture. `debug` is a WARN: it captures
+    message CONTENT to disk, which is the privacy footgun the WARNING default
+    exists to avoid. Other levels are informational."""
+    if config_path is None:
+        return (_OK, "default (warning) — enforcement events only, no content")
+    from reflexes.config import read_log_settings
+    level, fmt = read_log_settings(config_path)
+    fmt_note = " (json)" if fmt == "json" else ""
+    if level == "debug":
+        return (_WARN, f"level=debug{fmt_note} — message CONTENT is being written to the log; use only for troubleshooting")
+    if level in ("off", "none"):
+        return (_OK, f"disabled{fmt_note} — nothing logged (including fail-open events)")
+    return (_OK, f"level={level}{fmt_note} — enforcement events only, no content")
+
+
 def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
     if config_path is None:
         return (_FAIL, "skipped (no config)")
@@ -217,6 +233,8 @@ def run_doctor(
     emit(status, "config", msg)
     ev_status, ev_msg = _check_evaluator(config_path)
     emit(ev_status, "evaluator", ev_msg)
+    lstatus, lmsg = _check_logging(config_path)
+    emit(lstatus, "logging", lmsg)
     for host, hstatus, hmsg in _check_hosts():
         emit(hstatus, host, hmsg)
 

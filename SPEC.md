@@ -207,7 +207,6 @@ declares **reflex bindings** — `(policy, name, trigger, action)` tuples —
 grouped under named sets:
 
 ```yaml
-enabled: true   # optional global switch (default true); false disables all enforcement
 reflexes:
   default:
     - policy: ./policies/prompt-injection.md
@@ -230,14 +229,33 @@ evaluators:
     type: zentropi
     model: cope-latest
     api_key_env: ZENTROPI_API_KEY
+
+# Optional operational settings (safe defaults); conventionally at the bottom.
+enabled: true
+logging:
+  level: warning   # off | error | warning (default) | info | debug
+  format: text     # text | json
 ```
 
 An optional top-level `enabled` boolean (default `true`) is a global kill
 switch: when `false`, a runtime MUST load no bindings and every check MUST allow
-(as if no policies were bound). Because a disabled safety layer is
+(as if no policies were bound), and it MUST NOT invoke the evaluator. Only the
+literal boolean `false` disables; an absent, null, or unrecognized value MUST be
+treated as enabled (fail safe). Because a disabled safety layer is
 indistinguishable from a healthy one at the enforcement path, a runtime SHOULD
 surface the disabled state prominently in any status/health output — never as a
 healthy or enforcing state.
+
+An optional top-level `logging` block controls diagnostic logging. `level`
+(one of `off`, `error`, `warning`, `info`, `debug`; default `warning`) governs
+verbosity, and `format` (`text` or `json`; default `text`) the record shape. A
+runtime MUST NOT emit evaluated message content above the `debug` level, so the
+default level captures enforcement events without user content; `off` disables
+diagnostic logging entirely. An unrecognized `level` MUST fall back to the
+default (never a more verbose one). Configuration is file-only — a conforming
+runtime SHOULD NOT require environment variables to control logging. Where
+multiple runtimes may write to a shared log destination, a runtime SHOULD tag
+each record with the originating host so lines remain attributable.
 
 The `default` group, if present, MUST always apply. Named groups are
 opt-in by the runtime user. A runtime MUST resolve the same
@@ -264,7 +282,7 @@ A Reflexes-compatible runtime MUST support these three actions:
 |---------|------------------------|
 | `deny`  | Block the operation. Construct a feedback message containing the criteria text from §3.3 and surface it to the agent via the framework's native rejection mechanism. |
 | `flag`  | Allow the operation. Make the verdict observable (logs, structured metadata, framework-native state) without interrupting the agent. |
-| `log`   | Allow the operation. Log the verdict at INFO. |
+| `log`   | Allow the operation. Record the verdict in the diagnostic log (at the default WARNING level, so it surfaces without raising verbosity). |
 
 A runtime MAY define additional actions (e.g. `escalate`, `modify`,
 `route`); such extensions are non-normative for v0.1.

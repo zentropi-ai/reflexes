@@ -151,7 +151,7 @@ def register_reflex_actions(
                         binding.policy.name, verdict.confidence,
                     )
                 elif binding.action == "log":
-                    logger.info(
+                    logger.warning(
                         "Reflex %s matched (confidence=%.2f)",
                         binding.policy.name, verdict.confidence,
                     )
