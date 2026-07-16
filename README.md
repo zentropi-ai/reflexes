@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
 > **Status: v0.1 — first public release.** Claude Code, OpenAI Codex, LangGraph,
-> Hermes, and Google ADK are Stable; other hosts are Beta or Experimental — see
+> and Google ADK are Stable; other hosts are Beta or Experimental — see
 > [`FRAMEWORKS.md`](./FRAMEWORKS.md) for per-host maturity.
 
 ## Contents
@@ -271,7 +271,7 @@ limits.
 | LangGraph | `middleware_from_config()` | 🟢 Stable |
 | Claude Code | `SKILL.md` agent-driven install (settings.json) | 🟢 Stable |
 | OpenAI Codex | `SKILL.md` agent-driven install (hooks.json) | 🟢 Stable |
-| NousResearch Hermes (≥0.18) | `hooks:` in `~/.hermes/config.yaml` → `nous_hermes_shell` | 🟢 Stable — full pre-call deny |
+| NousResearch Hermes (≥0.18) | `hooks:` in `~/.hermes/config.yaml` → `nous_hermes_shell` | 🟡 Beta — `before_tool_call` blocks; `on_input`/`after_tool_call`/coding-turn limits |
 | OpenClaw | `@zentropi/reflexes-openclaw` plugin (`before_tool_call` + `before_response`) | 🟡 Beta |
 | Google ADK | `with_reflexes()` (callbacks) | 🟢 Stable |
 | Claude Agent SDK | `create_hooks()` | 🟡 Beta |

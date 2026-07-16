@@ -29,7 +29,7 @@ Experimental tier — is exactly where community contributions land.
 
 - **🟢 Stable** — production-ready: deny/flag/log actions, self-correction, the key triggers, and
   task context are in place and verified end-to-end against a live agent.
-  → **Claude Code, OpenAI Codex, LangGraph, Hermes, Google ADK.** (ADK's one
+  → **Claude Code, OpenAI Codex, LangGraph, Google ADK.** (ADK's one
   caveat: `before_response` deny *substitutes* the policy text for the response
   rather than forcing a revise — fail-safe, a framework limit; its other
   triggers self-correct.)
@@ -44,6 +44,12 @@ Experimental tier — is exactly where community contributions land.
     can't enforce `after_tool_call` (OpenClaw's post-tool hook is observe-only);
     `on_input` (input gate), `before_tool_call`, and `before_response` all
     enforce with self-correction.
+  - **Hermes** — `before_tool_call` hard-blocks with self-correction, but the
+    other triggers are limited by the host: an `on_input` deny can't hard-block
+    (Hermes honors no block on `pre_llm_call` — it fires and injects the policy
+    as context, best-effort, but the prompt still runs), `after_tool_call` is
+    unsupported (its post-tool hook is observe-only), and `before_response`
+    self-correction fires only on coding/file-editing turns.
 - **🔴 Experimental** — a core capability is structurally missing (a framework
   limit), or the integration is newer and wants more soak. Works within its
   limits; contributions welcome:
@@ -67,7 +73,7 @@ the host has no agent-visible channel (see [Actions](#actions)).
 |---|---|---|---|---|---|
 | Claude Code | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
 | OpenAI Codex | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
-| Hermes | ⚠️ context only | ✅ | ❌ | ⚠️ coding turns only | 🟢 Stable |
+| Hermes | ⚠️ context only | ✅ | ❌ | ⚠️ coding turns only | 🟡 Beta |
 | OpenClaw | ✅ | ✅ | ❌ | ✅ | 🟡 Beta |
 
 ### Framework libraries (SDKs you wrap in your own code)
