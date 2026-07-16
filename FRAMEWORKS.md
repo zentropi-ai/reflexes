@@ -67,7 +67,7 @@ the host has no agent-visible channel (see [Actions](#actions)).
 |---|---|---|---|---|---|
 | Claude Code | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
 | OpenAI Codex | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
-| Hermes | ✅ | ✅ | ✅ | ⚠️ coding turns only | 🟢 Stable |
+| Hermes | ⚠️ context only | ✅ | ❌ | ⚠️ coding turns only | 🟢 Stable |
 | OpenClaw | ❌ | ✅ | ❌ | ✅ | 🟡 Beta |
 
 ### Framework libraries (SDKs you wrap in your own code)
@@ -248,9 +248,9 @@ spawn — which fails open.
 | Reflexes trigger | Hermes hook | Capability |
 |---|---|---|
 | before_tool_call | `pre_tool_call` | Pre-execution deny — vetoes the call; the policy text becomes the tool result the model sees. |
-| on_input | `pre_llm_call` | Deny; also injects model-visible context (delivers the fail-open notice). |
+| on_input | `pre_llm_call` | Fires and injects the policy as model-visible context (best-effort refusal) + delivers fail-open/update notices. Hermes honors **no block** on `pre_llm_call`, so a deny can't hard-stop the turn — use `before_tool_call`/`before_response` for a hard block. |
 | before_response | `pre_verify` | Force a revise — but `pre_verify` fires only on coding/file-editing turns, so `before_response` policies don't run on plain conversational turns. `before_tool_call` has no such limit. |
-| after_tool_call | `post_tool_call` | Observe the tool result. |
+| after_tool_call | `post_tool_call` | Not supported for enforcement — Hermes' `post_tool_call` fires *after* execution and a shell hook's return there is discarded (observer-only), so it can't veto. Enforce at `before_tool_call`. |
 
 The pre-0.18 `nous_hermes.py` (loop-level observer, deny one turn late) is
 retained only for legacy installs.

@@ -1,9 +1,11 @@
 """NousResearch Hermes shell-hook integration (hermes-agent >= 0.18).
 
 Hermes 0.18 replaced the importlib hook-pack convention with **shell
-hooks** configured in ``~/.hermes/config.yaml`` — and, crucially, added
-per-call events (``pre_tool_call``, ``pre_llm_call``, ``pre_verify``)
-with Claude-Code-style block directives::
+hooks** configured in ``~/.hermes/config.yaml``. Hermes defines ~25 hook events
+(``hermes_cli/plugins.py`` ``VALID_HOOKS``), but a *shell* hook can
+consequentially act on only three: ``pre_tool_call`` (block a tool call),
+``pre_verify`` (nudge a response revise), and ``pre_llm_call`` (inject context).
+Every other event's shell-hook return is discarded — observer-only::
 
     hooks:
       pre_tool_call:
@@ -43,6 +45,20 @@ fail-open upgrade notice can reach the model — see below)::
 Event mapping: ``pre_tool_call`` -> ``before_tool_call``;
 ``pre_verify`` (final response about to be delivered) -> ``before_response``;
 ``post_tool_call`` -> ``after_tool_call``; ``pre_llm_call`` -> ``on_input``.
+
+``on_input`` caveat: Hermes honors NO block directive on ``pre_llm_call`` — only
+``{"context": ...}`` (verified against hermes-agent 0.18.2
+``agent/shell_hooks.py``). So an ``on_input`` deny **fires and injects the policy
+as model-visible context (best-effort refusal) but cannot hard-stop the turn**.
+For a hard block on the user's request, use ``before_tool_call`` /
+``before_response`` policies instead. (A hard input block would require a
+*Python* ``pre_gateway_dispatch`` plugin on the gateway path — not this
+shell-hook integration, and never on the CLI.)
+
+``after_tool_call`` is also unsupported: Hermes' ``post_tool_call`` event *does*
+exist, but a shell hook's return there is **discarded** (observer-only,
+``model_tools.py``), and it fires *after* the tool has already run — so it can't
+veto. Enforce at ``before_tool_call``.
 
 Fail-open upgrade notice: when a check can't run for a tier/capability reason
 (sustained rate limit / subscriber-only), it fails open, and a one-line notice
@@ -475,7 +491,14 @@ def main() -> None:
             continue
         if binding.action == "deny":
             feedback = build_feedback(trigger, binding.policy.criteria)
-            print(json.dumps({"decision": "block", "reason": feedback}))
+            if trigger == "on_input":
+                # Hermes honors NO block directive on pre_llm_call — only
+                # {"context": ...}. A deny can't hard-stop the turn here, so
+                # inject the policy as model-visible context (best-effort refusal)
+                # rather than emit a block Hermes would silently drop (fail-open).
+                print(json.dumps({"context": feedback}))
+            else:
+                print(json.dumps({"decision": "block", "reason": feedback}))
             return
         logger.warning(
             "reflexes %s: %s matched policy %s", binding.action, trigger, binding.policy.name

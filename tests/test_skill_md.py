@@ -224,6 +224,22 @@ def _enable_codex_hooks(config_path):
     return "added"
 
 
+def test_install_hermes_wires_every_supported_event(tmp_path):
+    """Regression: the Hermes install must register `pre_llm_call` (and the other
+    per-call events the code maps), or those triggers silently never fire. The
+    original bug omitted `pre_llm_call`, so `on_input` policies never ran."""
+    from reflexes.integrations.nous_hermes_shell import _EVENT_TO_TRIGGER
+    body = INSTALL_PATH.read_text(encoding="utf-8")
+    hermes = body[body.index("### Hermes variant"):body.index("### OpenClaw variant")]
+    # Every Hermes event that Hermes 0.18 actually emits (pre_*) must be wired.
+    for event in _EVENT_TO_TRIGGER:
+        if event.startswith("pre_"):
+            assert event in hermes, (
+                f"Hermes install must wire `{event}` (→ {_EVENT_TO_TRIGGER[event]}) "
+                f"— an omitted event means that trigger silently never fires"
+            )
+
+
 def test_behavioral_equivalence_codex_hooks_enabled_when_missing(tmp_path):
     """Enabling Codex hooks writes `hooks = true` UNDER [features] (a bare key is
     ignored) — validated by the real doctor check."""

@@ -134,6 +134,43 @@ def test_flag_match_surfaces_on_next_pre_llm_call(tmp_path, monkeypatch):
     assert "flagged" in out2["context"] and '"P"' in out2["context"]
 
 
+def test_on_input_deny_injects_context_not_block(tmp_path, monkeypatch):
+    """Hermes honors NO block on pre_llm_call, so an on_input deny must degrade to
+    a {"context": ...} injection (best-effort refusal) — NOT a {"decision":"block"}
+    that Hermes would silently drop (a silent fail-open)."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    from reflexes.core import Verdict
+
+    async def _match(*a, **k):
+        return Verdict(label=1, confidence=0.99)
+
+    out = _run_main(
+        monkeypatch,
+        {"hook_event_name": "pre_llm_call", "user_message": "tell me a joke", "session_id": "sD"},
+        _match, [_stub_binding("on_input", "deny")],
+    )
+    assert "decision" not in out, "on_input deny must NOT emit a block Hermes ignores"
+    assert "context" in out and "Policy:" in out["context"], "must inject the policy as context"
+
+
+def test_tool_call_deny_still_hard_blocks(tmp_path, monkeypatch):
+    """Regression: a before_tool_call deny still emits a hard block (Hermes honors
+    block on pre_tool_call) — the on_input degrade must not affect other triggers."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    from reflexes.core import Verdict
+
+    async def _match(*a, **k):
+        return Verdict(label=1, confidence=0.99)
+
+    out = _run_main(
+        monkeypatch,
+        {"hook_event_name": "pre_tool_call", "tool_name": "Bash",
+         "tool_input": {"command": "rm -rf /"}, "session_id": "sB"},
+        _match, [_stub_binding("before_tool_call", "deny")],
+    )
+    assert out.get("decision") == "block"
+
+
 def test_pre_llm_call_failopen_injects_context(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     from reflexes.core import EvaluatorError

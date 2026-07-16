@@ -234,11 +234,30 @@ Create `~/.reflexes/hermes-hook.sh`, executable (keep `$HOME` literal):
 exec uv run <SKILL_DIR>/scripts/reflexes-hook --host hermes --config $HOME/.reflexes/reflexes.yaml
 ```
 
-Register its **absolute** path in `~/.hermes/config.yaml` under
-`pre_tool_call` and `pre_verify` as `command` hooks (preserve existing).
+Register its **absolute** path in `~/.hermes/config.yaml` on **all three**
+per-call events (preserve existing) — each maps to a trigger, and an omitted
+event means that trigger's policies **silently never fire**:
+
+```yaml
+hooks:
+  pre_llm_call:    # on_input policies (also lets fail-open / upgrade notices reach the model)
+    - command: "<absolute path>/.reflexes/hermes-hook.sh"
+  pre_tool_call:   # before_tool_call policies
+    - command: "<absolute path>/.reflexes/hermes-hook.sh"
+  pre_verify:      # before_response policies
+    - command: "<absolute path>/.reflexes/hermes-hook.sh"
+```
+
 Approve it (`hermes hooks test pre_tool_call`, or run Hermes once with
-`--accept-hooks`), then `hermes hooks doctor`. Pre-0.18 Hermes has no
-pre-call hook — deny lands one turn late.
+`--accept-hooks`), then `hermes hooks doctor`.
+
+**Hermes trigger caveats:** an `on_input` deny **fires and injects the policy as
+context (best-effort), but Hermes can't hard-block a `pre_llm_call`** — for a
+hard stop on the user's request, use `before_tool_call` / `before_response`
+policies. `after_tool_call` is unsupported too: Hermes' `post_tool_call` hook is
+observer-only for shell hooks (its return is discarded) and fires after the tool
+already ran. (Pre-0.18 Hermes has no pre-call hook either — deny lands one turn
+late.)
 
 ### OpenClaw variant
 
