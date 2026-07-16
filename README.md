@@ -64,8 +64,7 @@ instead of just looping against a wall or breaking one of your rules.
 Reflexes can install itself. **Just tell your coding agent to install the Reflexes
 skill:**
 
-> Install the Reflexes skill from github.com/zentropi-ai/reflexes — clone the
-> repo, read `skill/SKILL.md`, and follow it to wire Reflexes into this agent.
+> Install the reflexes skill from github.com/zentropi-ai/reflexes then wire it into this agent.
 
 Your agent reads `SKILL.md` and does the rest for your host (Claude Code, OpenAI
 Codex, Hermes, or OpenClaw): detects the host, installs the starter policies,
