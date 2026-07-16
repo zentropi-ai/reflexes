@@ -62,6 +62,7 @@ As Reflexes is a **safety harness**, treat these as hard rules:
 |---|---|
 | Install Reflexes into a host CLI | **`INSTALL.md`** |
 | Add Reflexes to a Python agent framework | `INSTALL.md` → Library install |
+| Uninstall Reflexes (or just pause it) | `INSTALL.md` → Uninstalling |
 | Understand or edit `reflexes.yaml` | **The config file** (below) |
 | Write, test, or share a policy | **Manage policies** (below); full guide `references/writing-policies.md` |
 | Change the evaluator model | **Swap the evaluator** (below) |

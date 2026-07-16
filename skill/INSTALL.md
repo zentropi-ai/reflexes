@@ -394,3 +394,76 @@ Install is idempotent: Step 4 skips existing policies, Step 5 skips an
 existing `reflexes.yaml`, Step 6 skips an already-wired event. Safe to
 re-run — to switch hosts (re-run with the other slug) or recover partial
 state.
+
+## Uninstalling
+
+Uninstalling means removing two things: the **skill** and the host **wiring**
+(hooks or plugin). By default, **leave `~/.reflexes/` in place** — it holds the
+user's policies and config (their edits), it's small, and keeping it makes a
+future re-install a one-step affair. Delete it only for a *truly clean* removal
+(last step below). No scripts are needed; these are edits you make.
+
+> **Just want to pause enforcement, not uninstall?** Set `enabled: false` in the
+> operational footer of `~/.reflexes/reflexes.yaml` instead — enforcement stops
+> everywhere, everything stays wired, and flipping it back is instant. See
+> SKILL.md → *Turning Reflexes on and off*. Uninstall only when you want the
+> hooks and skill actually gone.
+
+Do the steps for the install type you're removing.
+
+### Subprocess host CLI (Claude Code, Codex, Hermes)
+
+1. **Un-wire the hooks** — reverse Step 6 in the same settings file, removing
+   only the Reflexes entries and preserving everything else:
+   - **`claude-code`** (`~/.claude/settings.json`) — in each of `SessionStart`,
+     `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, delete the entry
+     whose `command` contains `reflexes-hook`. If an event's array is left empty,
+     you may drop the event key. Leave any non-Reflexes hooks alone.
+   - **`codex`** (`~/.codex/hooks.json`) — same: remove the `reflexes-hook`
+     entries. You can leave `[features] hooks = true` in `~/.codex/config.toml`
+     (harmless once no hooks are wired) or remove it if Reflexes was the only
+     reason it was enabled. Once the entries are gone, the trust state is moot —
+     no `/hooks` step needed.
+   - **`hermes`** (`~/.hermes/config.yaml`) — remove the `hermes-hook.sh` entries
+     under `pre_llm_call`, `pre_tool_call`, and `pre_verify`, then delete
+     `~/.reflexes/hermes-hook.sh`.
+   - If your edit leaves the settings file invalid (JSON/YAML), you broke it —
+     fix or restore it; never leave it malformed.
+2. **Remove the skill** — delete the skill folder (`SKILL_DIR`), or remove it
+   however the host manages skills. (Copying the folder in was the install;
+   deleting it is the uninstall.)
+3. **Restart the host** so it stops invoking the removed hooks.
+4. **Confirm** — after restart, trigger something a policy used to catch; nothing
+   should fire. (You can't run `reflexes-doctor` once the skill is gone — that's
+   expected, not an error.)
+
+### OpenClaw
+
+1. Uninstall the plugin:
+   `openclaw plugins uninstall @zentropi/reflexes-openclaw`.
+2. Optional: unset the access flag granted at install —
+   `openclaw config unset plugins.entries.reflexes.hooks.allowConversationAccess`.
+3. Restart the gateway.
+
+### Python-framework project (library)
+
+1. Remove the `with_reflexes(...)` / `middleware_from_config(...)` /
+   `create_hooks(...)` wiring from the agent code.
+2. Drop the dependency: `uv remove reflexes` (or `poetry remove reflexes` /
+   `pip uninstall reflexes`).
+3. The project-local `reflexes.yaml` + `policies/` are the user's — keep or
+   delete them.
+
+### Truly clean removal (optional)
+
+The steps above leave `~/.reflexes/` (policies, config, and the
+`~/.reflexes/.policy-cache/` of hosted policies) so a re-install is trivial. To
+leave nothing behind, also delete it and the runtime cache (sessions + the
+`debug.log`):
+
+```bash
+rm -rf ~/.reflexes ~/.cache/reflexes
+```
+
+Only do this if you're sure you won't re-install — otherwise the keep-it default
+saves re-writing the config and re-tuning the policies.
