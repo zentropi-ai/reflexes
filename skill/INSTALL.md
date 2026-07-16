@@ -341,7 +341,14 @@ environment. Do NOT wire `with_reflexes(...)` now — that's applied later
 when the user builds the agent.
 
 1. Add it with the project's own package manager: `uv add reflexes`,
-   `poetry add reflexes`, or `pip install reflexes`.
+   `poetry add reflexes`, or `pip install reflexes`. The target framework is a
+   peer dependency you install yourself — Reflexes doesn't pull it in. Note the
+   **LangGraph** path also needs the `langchain` package (for
+   `langchain.agents.create_agent` + `AgentMiddleware`); `langgraph` +
+   `langchain-core` alone is not enough. The import is lazy, so
+   `import reflexes.integrations.langgraph` succeeds — it's building the
+   middleware (`middleware_from_config(...)`) that raises
+   `ModuleNotFoundError: No module named 'langchain'` until it's installed.
 2. Verify it imports: `python -c "import reflexes; print(reflexes.__version__)"`.
 3. Create a project-local `reflexes.yaml` + `policies/` (same shape as
    Step 5, living in the project dir).

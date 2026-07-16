@@ -428,8 +428,14 @@ def main(host: str = "hermes") -> None:
 
     content = extract_content(payload, trigger) if trigger else None
     if not trigger or not content:
+        logger.debug("no trigger/content -> passthrough (event=%s)", payload.get("hook_event_name"))
         print(json.dumps({}))
         return
+    # Content is logged ONLY at debug (truncated) — never at the default level.
+    logger.debug(
+        "trigger=%s, extracted content (%d chars): %s",
+        trigger, len(content), content[:200] + ("…" if len(content) > 200 else ""),
+    )
 
     groups = [g.strip() for g in args.reflexes.split(",") if g.strip()]
     try:
@@ -449,6 +455,8 @@ def main(host: str = "hermes") -> None:
             )
         )
         return
+
+    logger.debug("matching bindings for '%s': %d", trigger, len(bindings))
 
     # Evaluate all matching policies in parallel (cap: max_concurrent(),
     # default 10, override REFLEXES_MAX_CONCURRENT), then apply results in
@@ -492,6 +500,11 @@ def main(host: str = "hermes") -> None:
                 upgrade_notice = format_upgrade_notice(verdict.upgrade)
             logger.warning("Evaluator error (fail-open): %s", verdict.error[:80])
             continue
+        if verdict is not None:
+            logger.debug(
+                "  policy %s -> label=%d confidence=%.2f",
+                binding.policy.name, verdict.label, verdict.confidence or 0.0,
+            )
         if verdict is None or verdict.label != 1:
             continue
         if binding.action == "deny":

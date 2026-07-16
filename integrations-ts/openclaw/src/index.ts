@@ -50,10 +50,13 @@ function configureLogging(doc: Record<string, unknown> | null): void {
 // govern them uniformly.
 function _emit(levelName: string, levelNum: number, msg: string): void {
   if (levelNum > _logThreshold) return;
+  // The host tag identifies the subsystem already, so drop a redundant inline
+  // `[reflexes]` prefix on operational messages (avoids `[openclaw] [reflexes] …`).
+  const clean = msg.replace(/^\[reflexes\]\s*/, "");
   if (_logFormat === "json") {
-    console.warn(JSON.stringify({ level: levelName, logger: "reflexes", host: _LOG_HOST, message: msg }));
+    console.warn(JSON.stringify({ level: levelName, logger: "reflexes", host: _LOG_HOST, message: clean }));
   } else {
-    console.warn(`[${_LOG_HOST}] ${msg}`);
+    console.warn(`[${_LOG_HOST}] ${clean}`);
   }
 }
 function rxwarn(msg: string): void {
@@ -1204,7 +1207,10 @@ export async function checkToolCall(
     opts.taskContext?.standingInstructions ?? resolveStandingInstructions(opts.cwd ?? process.cwd());
   const context = assembleTaskContext({ currentRequest, originalTask, standingInstructions }) || null;
   const content = assembleContent(toolCallContent(event), context, "Tool call", "Task context");
-  rxdebug(`before_tool_call: evaluating ${event.toolName} (${content.length} chars): ${_truncForLog(content)}`);
+  // Log the raw tool-call payload (the security-relevant part), not the
+  // assembled string — task context is prepended there and would truncate the
+  // args out of view. `content.length` still reports the full assembled size.
+  rxdebug(`before_tool_call: evaluating ${event.toolName} (${content.length} chars assembled): ${_truncForLog(toolCallContent(event))}`);
   // Evaluate all bound policies in parallel (cap: REFLEXES_MAX_CONCURRENT,
   // default 10), then apply results in binding order — first deny wins.
   const verdicts = await mapWithConcurrency(
@@ -1286,7 +1292,9 @@ export async function checkResponse(
       .filter((s): s is string => Boolean(s && s.trim()))
       .join("\n\n") || null;
   const content = assembleContent(response, context, "Agent response", "Task context");
-  rxdebug(`before_response: evaluating response (${content.length} chars): ${_truncForLog(content)}`);
+  // Log the raw response (the evaluated payload), not the context-prefixed
+  // assembled string, so it isn't truncated away by long task context.
+  rxdebug(`before_response: evaluating response (${content.length} chars assembled): ${_truncForLog(response)}`);
   const verdicts = await mapWithConcurrency(
     bindings,
     maxConcurrent(),
