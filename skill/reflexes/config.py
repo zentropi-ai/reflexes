@@ -29,6 +29,22 @@ def _load_raw(config_file: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
+def _enabled_from_raw(raw: dict) -> bool:
+    """A top-level `enabled: false` disables the whole system. Absent, or any
+    value other than the boolean `false`, means enabled (the safe default)."""
+    return raw.get("enabled", True) is not False
+
+
+def is_enabled(config_file: str | Path = "reflexes.yaml") -> bool:
+    """Global on/off switch. `enabled: false` at the top of reflexes.yaml turns
+    ALL enforcement off (no bindings load, every hook no-ops → allow). Defaults
+    to enabled; a read error never disables (fail safe — stay on)."""
+    try:
+        return _enabled_from_raw(_load_raw(config_file))
+    except Exception:
+        return True
+
+
 def load_config(
     reflexes: list[str],
     config_file: str | Path = "reflexes.yaml",
@@ -40,6 +56,8 @@ def load_config(
     wins for the same (policy, trigger) pair.
     """
     raw = _load_raw(config_file)
+    if not _enabled_from_raw(raw):
+        return []  # globally disabled (`enabled: false`) — no bindings; hooks no-op (allow)
     config_dir = Path(config_file).parent.resolve()
 
     reflex_groups = raw.get("reflexes", {})

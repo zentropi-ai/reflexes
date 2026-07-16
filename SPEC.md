@@ -207,6 +207,7 @@ declares **reflex bindings** — `(policy, name, trigger, action)` tuples —
 grouped under named sets:
 
 ```yaml
+enabled: true   # optional global switch (default true); false disables all enforcement
 reflexes:
   default:
     - policy: ./policies/prompt-injection.md
@@ -230,6 +231,13 @@ evaluators:
     model: cope-latest
     api_key_env: ZENTROPI_API_KEY
 ```
+
+An optional top-level `enabled` boolean (default `true`) is a global kill
+switch: when `false`, a runtime MUST load no bindings and every check MUST allow
+(as if no policies were bound). Because a disabled safety layer is
+indistinguishable from a healthy one at the enforcement path, a runtime SHOULD
+surface the disabled state prominently in any status/health output — never as a
+healthy or enforcing state.
 
 The `default` group, if present, MUST always apply. Named groups are
 opt-in by the runtime user. A runtime MUST resolve the same

@@ -32,6 +32,7 @@ Create `~/.reflexes/reflexes.yaml` — the same config every Reflexes host share
 and bind policies to triggers:
 
 ```yaml
+enabled: true   # optional global on/off; set false to disable ALL enforcement. Absent = enabled (safe default).
 reflexes:
   default:
     - policy: ./policies/Unconfirmed-Destructive-Action.md

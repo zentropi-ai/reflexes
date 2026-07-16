@@ -75,9 +75,12 @@ As Reflexes is a **safety harness**, treat these as hard rules:
 which policies are enforced, at which trigger, with which action, and which
 evaluator scores them. If it isn't in this file, Reflexes doesn't do it. Managing
 this file — always with the user's consent — is one of your core jobs, so know
-its shape cold. It has exactly two top-level keys:
+its shape cold. It has two required top-level keys, plus an optional `enabled`
+switch:
 
 ```yaml
+enabled: true            # optional global on/off; set false to disable ALL
+                         # enforcement (default true when absent)
 reflexes:                # WHAT is enforced — named groups of bindings
   default:               # the `default` group is always active; most bindings go here
     - policy: ./policies/Unconfirmed-Destructive-Action.md   # the policy source
@@ -106,6 +109,11 @@ evaluators:              # WHO scores content against the policies
   active set share a `(policy, trigger)` pair, the last one wins.
 - **`evaluators:`** — the single evaluator, under `default`. One evaluator scores
   every policy; to change it, see *Swap the evaluator*.
+- **`enabled:`** *(optional)* — the global on/off switch. `enabled: false` turns
+  **all** enforcement off system-wide (no bindings load, every host no-ops) —
+  cleaner than uninstalling or commenting out bindings, and it leaves your
+  policies intact. Absent = on. When it's off, `reflexes-doctor` says so loudly
+  (`REFLEXES IS DISABLED`), never "all good." Restart the host after flipping it.
 
 **Editing it safely:**
 

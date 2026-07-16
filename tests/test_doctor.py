@@ -146,6 +146,26 @@ def test_codex_host_warns_on_trust_even_when_configured_and_enabled(tmp_path, mo
     assert "trust" in msg.lower() and "/hooks" in msg
 
 
+def test_doctor_reports_disabled_loudly(tmp_path, monkeypatch, capsys):
+    """A globally disabled system (`enabled: false`) must be reported LOUDLY and
+    must NOT read as healthy/enforcing — the whole point of the doctor."""
+    pol = tmp_path / "policies"
+    pol.mkdir()
+    (pol / "p.md").write_text("# Criteria\n\n## Overview\nx\n")
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text(
+        "enabled: false\nreflexes:\n  default:\n    - policy: ./policies/p.md\n"
+        "      name: p\n      trigger: before_tool_call\n      action: deny\n"
+        "evaluators:\n  default:\n    type: zentropi\n"
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = run_doctor(config=str(cfg))
+    out = capsys.readouterr().out
+    assert "DISABLED" in out, "doctor must say DISABLED when enabled: false"
+    assert "All checks passed" not in out, "disabled must NOT read as healthy"
+    assert rc != 0, "disabled must not be a green exit"
+
+
 def test_run_doctor_exit_codes(tmp_path, monkeypatch, capsys):
     # Broken config must exit 2 even if evaluator/hosts are fine or absent.
     cfg = _write_config(tmp_path, broken=True)

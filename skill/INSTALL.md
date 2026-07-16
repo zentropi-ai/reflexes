@@ -116,6 +116,7 @@ bundle present but commented out, so a user editing `reflexes.yaml` discovers
 it naturally without the installer having to explain any of this:
 
 ```yaml
+enabled: true   # global on/off — set false to disable ALL enforcement (policies kept). Absent = enabled (safe default).
 reflexes:
   default:
     # --- Integrity (safety) — enabled ---

@@ -112,7 +112,17 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
       continue;
     }
     const doc = parseYaml(raw) as Record<string, unknown>;
-    const groups = (doc?.reflexes ?? {}) as Record<
+    // Global kill switch: a top-level `enabled: false` turns the whole system
+    // off — no bindings load, every hook no-ops. Say so loudly (the doctor is the
+    // Python-side loud surface; this is OpenClaw's).
+    const disabled = doc?.enabled === false;
+    if (disabled) {
+      console.warn(
+        `[reflexes] DISABLED — \`enabled: false\` in ${path}; NO policies are enforced. ` +
+          "Set `enabled: true` (or remove the line) and restart to re-enable.",
+      );
+    }
+    const groups = (disabled ? {} : (doc?.reflexes ?? {})) as Record<
       string,
       Array<{ policy: string; trigger: string; action: ReflexAction; name?: string }>
     >;

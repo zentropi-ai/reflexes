@@ -203,6 +203,16 @@ def run_doctor(
 
     print("reflexes doctor\n")
     config_path = _find_config(config)
+    # Global kill switch: if `enabled: false`, say so LOUDLY and stop — a disabled
+    # safety layer must never read as "all good" (that's the whole point of the
+    # doctor). Distinct from a fail-open: this is off on purpose.
+    from reflexes.config import is_enabled
+    if config_path is not None and not is_enabled(config_path):
+        print(f"  ⚠  REFLEXES IS DISABLED — `enabled: false` in {config_path}.")
+        print("     NO policies are being enforced. Set `enabled: true` (or remove")
+        print("     the line) and restart the host to re-enable.")
+        print("\nDISABLED — enforcement is off by config.")
+        return 1
     status, msg, _bindings = _check_config(config_path, groups)
     emit(status, "config", msg)
     ev_status, ev_msg = _check_evaluator(config_path)

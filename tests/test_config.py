@@ -106,6 +106,57 @@ evaluators:
     return tmp_path
 
 
+def _min_config(tmp_path, prefix=""):
+    """A minimal one-binding reflexes.yaml; `prefix` prepends e.g. 'enabled: false\\n'."""
+    pol = tmp_path / "policies"
+    pol.mkdir(exist_ok=True)
+    (pol / "p.md").write_text("# Criteria\n\n## Overview\nx\n")
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text(
+        prefix
+        + "reflexes:\n  default:\n    - policy: ./policies/p.md\n      name: p\n"
+        "      trigger: before_tool_call\n      action: deny\n"
+        "evaluators:\n  default:\n    type: zentropi\n"
+    )
+    return cfg
+
+
+def test_enabled_false_disables_all_bindings(tmp_path):
+    """`enabled: false` is the global kill switch — load_config returns NO
+    bindings, so every hook no-ops (allow)."""
+    from reflexes.config import is_enabled
+    cfg = _min_config(tmp_path, "enabled: false\n")
+    assert is_enabled(cfg) is False
+    assert load_config(reflexes=[], config_file=cfg) == []
+
+
+def test_enabled_true_or_absent_loads_normally(tmp_path):
+    from reflexes.config import is_enabled
+    cfg = _min_config(tmp_path, "enabled: true\n")
+    assert is_enabled(cfg) is True
+    assert len(load_config(reflexes=[], config_file=cfg)) == 1
+    cfg = _min_config(tmp_path, "")  # absent → default enabled
+    assert is_enabled(cfg) is True
+    assert len(load_config(reflexes=[], config_file=cfg)) == 1
+
+
+def test_is_enabled_missing_file_defaults_enabled(tmp_path):
+    """A read error must never silently disable — stay on (fail safe)."""
+    from reflexes.config import is_enabled
+    assert is_enabled(tmp_path / "nope.yaml") is True
+
+
+def test_only_literal_false_disables_garbled_values_stay_on(tmp_path):
+    """Safety default: ONLY the boolean `false` disables. A null, empty, or
+    typo'd value (e.g. `enabled: flase`) must fail safe to enabled, never off."""
+    from reflexes.config import is_enabled
+    for prefix in ("enabled:\n", "enabled: null\n", "enabled: flase\n", "enabled: 0\n"):
+        cfg = _min_config(tmp_path, prefix)
+        assert is_enabled(cfg) is True, f"{prefix!r} must stay enabled (fail safe)"
+        assert len(load_config(reflexes=[], config_file=cfg)) == 1
+        cfg.unlink(); (tmp_path / "policies" / "p.md").unlink(); (tmp_path / "policies").rmdir()
+
+
 def test_load_default_only(config_dir):
     os.chdir(config_dir)
     bindings = load_config(reflexes=[], config_file="reflexes.yaml")

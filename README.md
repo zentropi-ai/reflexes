@@ -151,6 +151,7 @@ The install ships six **starter policies**, ready to use, in two groups:
 where. Here is an example:
 
 ```yaml
+enabled: true   # optional global on/off; set false to disable ALL enforcement. Absent = enabled (safe default).
 reflexes:
   default:
     - policy: ./policies/Unconfirmed-Destructive-Action.md
