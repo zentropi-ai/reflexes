@@ -56,10 +56,11 @@ test("README documents the hosted policy schemes the code implements", () => {
   assert.match(README, /github:/, "README omits the github: policy scheme");
 });
 
-// 4. on_input / after_tool_call are observe-only on OpenClaw (framework limit).
-//    Guard the wording from regressing to "supported"/"not yet".
-test("README states on_input/after_tool_call are observe-only, not 'not yet'", () => {
+// 4. after_tool_call is observe-only on OpenClaw (framework limit); on_input now
+//    enforces via the before_agent_run gate. Guard both claims from regressing.
+test("README: after_tool_call observe-only, on_input enforces via before_agent_run", () => {
   assert.match(README, /observe-only/, "README should state the observe-only framework limitation");
-  assert.match(README, /on_input/, "README should name on_input in the limitations");
+  assert.match(README, /after_tool_call/, "README should name after_tool_call as the observe-only trigger");
+  assert.match(README, /before_agent_run/, "README should document on_input enforcement via before_agent_run");
   assert.doesNotMatch(README, /not yet wired/i, "stale 'not yet wired' wording — it's a framework limit, not a TODO");
 });

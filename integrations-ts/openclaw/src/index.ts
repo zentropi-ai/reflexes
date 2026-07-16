@@ -68,6 +68,21 @@ export interface BeforeToolCallResult {
   blockReason?: string;
 }
 
+// Shape of the `before_agent_run` event — OpenClaw's INPUT GATE, fired before the
+// user prompt reaches the model (verified against openclaw 2026.7.1
+// `PluginHookBeforeAgentRunEvent`; `prompt` is the user's message).
+export interface BeforeAgentRunEvent {
+  prompt?: string;
+}
+
+// OpenClaw's `InputGateDecision` (the `before_agent_run` return). The gate is
+// FAIL-CLOSED — a void/thrown result blocks the prompt — so a handler must ALWAYS
+// return an explicit outcome; on any internal error we return `pass` to keep
+// Reflexes' fail-OPEN contract (never block the user because our check broke).
+export type InputGateDecision =
+  | { outcome: "pass" }
+  | { outcome: "block"; reason: string; message?: string };
+
 export interface Verdict {
   label: "0" | "1";
   confidence?: number;
@@ -104,9 +119,22 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
     const bindings: ReflexBinding[] = [];
     for (const entries of Object.values(groups)) {
       for (const entry of entries ?? []) {
-        // Keep the triggers OpenClaw can enforce: before_tool_call (tool hook)
-        // and before_response (before_agent_finalize hook). Others are skipped.
-        if (entry.trigger !== "before_tool_call" && entry.trigger !== "before_response") continue;
+        // Triggers OpenClaw can enforce: on_input (before_agent_run gate),
+        // before_tool_call (tool hook), before_response (before_agent_finalize).
+        // after_tool_call is observe-only on OpenClaw — warn rather than silently
+        // drop it, so an operator doesn't think it's enforcing.
+        if (
+          entry.trigger !== "on_input" &&
+          entry.trigger !== "before_tool_call" &&
+          entry.trigger !== "before_response"
+        ) {
+          console.warn(
+            `[reflexes] policy "${entry.name ?? entry.policy}" binds trigger ` +
+              `"${entry.trigger}", which OpenClaw can't enforce (after_tool_call is ` +
+              `observe-only) — skipping. Use before_tool_call for tool-side enforcement.`,
+          );
+          continue;
+        }
         const ref = parseRef(entry.policy);
         const baseDir = dirname(path);
         // `name` is a required binding field; fall back to the file basename for
@@ -401,6 +429,14 @@ export interface OpenClawPluginApi {
   on(hook: "message_received", handler: (event: MessageReceivedEvent, ctx: ToolContext) => void, opts?: HookOpts): void;
   on(hook: "session_end", handler: (event: SessionEndEvent, ctx: ToolContext) => void, opts?: HookOpts): void;
   on(hook: "after_tool_call", handler: (event: AfterToolCallEvent, ctx: ToolContext) => void, opts?: HookOpts): void;
+  on(
+    hook: "before_agent_run",
+    handler: (
+      event: BeforeAgentRunEvent,
+      ctx: ToolContext,
+    ) => Promise<InputGateDecision> | InputGateDecision,
+    opts?: HookOpts,
+  ): void;
   on(
     hook: "reply_payload_sending",
     handler: (
@@ -1039,9 +1075,9 @@ async function evaluateGemini(
   });
 }
 
-export function denyReason(binding: ReflexBinding): string {
+export function denyReason(binding: ReflexBinding, subject = "tool call"): string {
   return (
-    `[REFLEXES POLICY CHECK] This tool call was blocked: it matches the ` +
+    `[REFLEXES POLICY CHECK] This ${subject} was blocked: it matches the ` +
     `"${binding.name}" policy. Read the policy below and choose a compliant ` +
     `alternative that still accomplishes the user's goal.\n\n` +
     `Policy:\n---\n${binding.criteria}\n---`
@@ -1236,10 +1272,80 @@ export async function checkResponse(
   return undefined;
 }
 
+/**
+ * Core `on_input` logic: evaluate the user's prompt against the bound `on_input`
+ * policies BEFORE it reaches the model, via OpenClaw's `before_agent_run` gate.
+ * On deny, return `{ outcome: "block" }` so OpenClaw never submits the prompt.
+ *
+ * `before_agent_run` is FAIL-CLOSED in OpenClaw (a void/thrown result blocks the
+ * prompt), so this ALWAYS returns an explicit decision and swallows every
+ * internal error into `{ outcome: "pass" }` — Reflexes fails OPEN, never blocking
+ * a user because our own check broke.
+ */
+export async function checkInput(
+  event: BeforeAgentRunEvent,
+  config: ReflexesConfig | null,
+  opts: EvaluateOptions = {},
+): Promise<InputGateDecision> {
+  try {
+    if (!config) return { outcome: "pass" };
+    const bindings = config.bindings.filter((b) => b.trigger === "on_input");
+    if (bindings.length === 0) return { outcome: "pass" };
+    const content = typeof event.prompt === "string" ? event.prompt : "";
+    if (!content.trim()) return { outcome: "pass" };
+    // on_input: the content IS the request — no extra task context to assemble.
+    const verdicts = await mapWithConcurrency(
+      bindings,
+      maxConcurrent(),
+      async (binding): Promise<Verdict | null> => {
+        let criteria: string;
+        try {
+          criteria = await resolveBindingCriteria(binding, opts.fetchImpl);
+        } catch (err) {
+          console.warn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
+          return null;
+        }
+        try {
+          return await evaluate(config, criteria, content, opts);
+        } catch (err) {
+          if (err instanceof UpgradeRequired) {
+            rememberUpgradeNotice(opts.sessionKey, err.userNotice);
+            opts.onFailOpenUpgrade?.(err);
+          }
+          console.warn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
+          return null;
+        }
+      },
+    );
+    for (let i = 0; i < bindings.length; i++) {
+      const binding = bindings[i];
+      const verdict = verdicts[i];
+      if (!verdict || verdict.label !== "1") continue;
+      if (binding.action === "deny") {
+        // Block the prompt before the model runs. `reason` is internal; `message`
+        // is the user-facing detail (the policy feedback the agent self-corrects on).
+        return { outcome: "block", reason: `reflexes: ${binding.name}`, message: denyReason(binding, "request") };
+      }
+      // flag / log: surface without blocking.
+      console.warn(
+        `[reflexes] ${binding.action}: input matched policy ${binding.name}` +
+          (verdict.confidence !== undefined ? ` (confidence ${verdict.confidence})` : ""),
+      );
+      if (binding.action === "flag") opts.onFlag?.(flagNote(binding, verdict, "input"));
+    }
+    return { outcome: "pass" };
+  } catch (err) {
+    // Never throw — a thrown/void return is fail-CLOSED (blocks the prompt).
+    console.warn(`[reflexes] on_input check failed (fail-open): ${String(err)}`);
+    return { outcome: "pass" };
+  }
+}
+
 /** OpenClaw plugin entry. Config is loaded once at registration. Capture hooks
  *  (`llm_input`, `message_received`, `session_end`, `after_tool_call`) build the
- *  task context + trajectory; `before_tool_call` and `before_agent_finalize`
- *  enforce policies; `reply_payload_sending` adds a fail-open upgrade notice as
+ *  task context + trajectory; `before_agent_run` (on_input), `before_tool_call`,
+ *  and `before_agent_finalize` (before_response) enforce policies;
+ *  `reply_payload_sending` adds a fail-open upgrade notice as
  *  a distinct footer block so the user sees when enforcement was degraded (the
  *  agent is also informed directly via a next-turn injection). */
 const entry = {
@@ -1265,6 +1371,18 @@ const entry = {
     // model-facing only, so the outbound reply is the only reliable way to tell
     // the human enforcement was degraded. Never mutates the model's response.
     api.on("reply_payload_sending", (event, ctx) => appendUpgradeNotice(event, ctx), { priority: 100 });
+    // Enforce on_input policies via the input gate — a deny blocks the prompt
+    // before the model runs. (Conversation hook: needs allowConversationAccess.)
+    api.on(
+      "before_agent_run",
+      async (event, ctx) =>
+        checkInput(event, config, {
+          sessionKey: ctx.sessionKey,
+          onFailOpenUpgrade: (upgrade) => enqueueAgentNotice(api, ctx.sessionKey, upgrade),
+          onFlag: (note) => enqueueAgentText(api, ctx.sessionKey, note, `reflexes-flag:${ctx.sessionKey}`),
+        }),
+      { priority: 100 },
+    );
     // Enforce before_tool_call policies on each tool call.
     api.on(
       "before_tool_call",

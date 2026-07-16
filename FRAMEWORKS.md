@@ -41,8 +41,8 @@ Experimental tier — is exactly where community contributions land.
     guardrails hard-stop unless you use the `run_with_reflexes()` retry wrapper.
   - **OpenClaw** — the TypeScript plugin is fully live-verified, but it's a
     separate codebase from the Python hosts and is soaking before promotion. It
-    also can't enforce `on_input`/`after_tool_call` (OpenClaw's input-side and
-    post-tool hooks are observe-only); `before_tool_call` + `before_response`
+    can't enforce `after_tool_call` (OpenClaw's post-tool hook is observe-only);
+    `on_input` (input gate), `before_tool_call`, and `before_response` all
     enforce with self-correction.
 - **🔴 Experimental** — a core capability is structurally missing (a framework
   limit), or the integration is newer and wants more soak. Works within its
@@ -68,7 +68,7 @@ the host has no agent-visible channel (see [Actions](#actions)).
 | Claude Code | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
 | OpenAI Codex | ✅ | ✅ | ✅ | ✅ | 🟢 Stable |
 | Hermes | ⚠️ context only | ✅ | ❌ | ⚠️ coding turns only | 🟢 Stable |
-| OpenClaw | ❌ | ✅ | ❌ | ✅ | 🟡 Beta |
+| OpenClaw | ✅ | ✅ | ❌ | ✅ | 🟡 Beta |
 
 ### Framework libraries (SDKs you wrap in your own code)
 
@@ -213,17 +213,21 @@ fail-open notice is operator-only.
 ### OpenClaw
 
 `integrations-ts/openclaw` — the `@zentropi/reflexes-openclaw` plugin. Registers
-seven hooks: four capture context (`llm_input`, `message_received`,
-`session_end`, `after_tool_call`), two enforce (`before_tool_call`,
-`before_agent_finalize`), and `reply_payload_sending` surfaces the fail-open
-notice.
+eight hooks: four capture context (`llm_input`, `message_received`,
+`session_end`, `after_tool_call`), three enforce (`before_agent_run`,
+`before_tool_call`, `before_agent_finalize`), and `reply_payload_sending`
+surfaces the fail-open notice.
 
+- **`on_input` deny** → `{outcome: "block", reason, message: <policy>}` on the
+  `before_agent_run` input gate; the prompt is blocked before the model runs.
+  (The gate is fail-*closed*, so the plugin always returns an explicit
+  `{outcome: "pass"}` and fails *open* — passes — on its own errors.)
 - **`before_tool_call` deny** → `{block: true, blockReason: <policy>}`; OpenClaw
   hands the policy text to the model as the tool error, which self-corrects.
 - **`before_response` deny** → `{action: "revise", retry: {instruction: <policy>}}`;
   OpenClaw blocks finalization and re-runs the model to revise.
-- **`on_input` / `after_tool_call` can't enforce** — OpenClaw's input-side and
-  post-tool hooks are observe-only (they can't block).
+- **`after_tool_call` can't enforce** — OpenClaw's post-tool hook is observe-only
+  (return discarded) and fires after the tool already ran.
 
 Reads the same `~/.reflexes/reflexes.yaml` as every other host and assembles the
 same labeled task context (the `before_*` events carry no conversation, so the
@@ -232,9 +236,10 @@ capture hooks reconstruct it). Supports all four evaluator backends
 
 **Install requirement:** set
 `plugins.entries.reflexes.hooks.allowConversationAccess=true` — OpenClaw gates
-the `llm_input` + `before_agent_finalize` hooks off for third-party plugins by
-default; without it, tool-call policies run context-starved and reply policies
-don't run. See the plugin's [README](./integrations-ts/openclaw/README.md).
+its **conversation hooks** (incl. `before_agent_run`, `llm_input`, and
+`before_agent_finalize`) off for third-party plugins by default; without it,
+`on_input` enforcement and reply policies don't run and tool-call policies run
+context-starved. See the plugin's [README](./integrations-ts/openclaw/README.md).
 
 ### Hermes (NousResearch)
 
@@ -288,8 +293,9 @@ retained only for legacy installs.
 
 Framework limits — gaps imposed by the host, not by Reflexes:
 
-- **OpenClaw `on_input` + `after_tool_call`** can't enforce (observe-only hooks).
-  `before_tool_call` + `before_response` enforce fully.
+- **OpenClaw `after_tool_call`** can't enforce (observe-only post-tool hook).
+  `on_input` (via the `before_agent_run` gate), `before_tool_call`, and
+  `before_response` all enforce fully.
 - **Hermes `before_response`** self-correction fires only on coding/file-editing
   turns (`pre_verify` posture). The primary `before_tool_call` deny is full.
 - **Google ADK `before_response`** deny substitutes rather than forcing a

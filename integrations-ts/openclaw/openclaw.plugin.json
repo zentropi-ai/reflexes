@@ -17,6 +17,6 @@
     "onStartup": true
   },
   "contracts": {
-    "hooks": ["llm_input", "message_received", "session_end", "after_tool_call", "before_tool_call", "before_agent_finalize", "reply_payload_sending"]
+    "hooks": ["llm_input", "message_received", "session_end", "after_tool_call", "before_agent_run", "before_tool_call", "before_agent_finalize", "reply_payload_sending"]
   }
 }

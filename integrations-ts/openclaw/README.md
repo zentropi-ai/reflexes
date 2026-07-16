@@ -72,8 +72,11 @@ CoPE; for them, set `model`, `api_key_env`, and (if needed) `endpoint`.
 
 ## What it does
 
-Reflexes enforces at two points in the agent loop:
+Reflexes enforces at three points in the agent loop:
 
+- **`on_input`** — the user's prompt is checked before it reaches the model (via
+  OpenClaw's `before_agent_run` input gate). On a deny the prompt is blocked and
+  never submitted. (Conversation hook — requires `allowConversationAccess`.)
 - **`before_tool_call`** — every tool call is checked before it runs. On a deny
   the call is blocked and the policy text is handed back as the tool error, so
   the agent sees why and chooses a compliant alternative.
@@ -96,11 +99,12 @@ or subscriber-only response adds a pointer to self-hosting the open CoPE model.
 
 ## Limitations
 
-- **The enforcing triggers are `before_tool_call` and `before_response`.**
-  `on_input` and `after_tool_call` can't enforce on OpenClaw — its input-side and
-  post-tool hooks are observe-only (they can't block), so bindings on those
-  triggers load but don't enforce. This is an OpenClaw limitation, not a Reflexes
-  one.
+- **The enforcing triggers are `on_input`, `before_tool_call`, and
+  `before_response`.** `after_tool_call` can't enforce on OpenClaw — its post-tool
+  hook is observe-only (return discarded) and fires after the tool has already
+  run, so bindings on it load but don't enforce. This is an OpenClaw limitation,
+  not a Reflexes one. (`on_input` enforcement uses the `before_agent_run` gate,
+  which is a conversation hook — set `allowConversationAccess: true`.)
 - Policies load once at gateway startup; restart after editing `reflexes.yaml`.
 - The user-facing fail-open notice rides the outbound reply, so it appears only
   when a chat channel is configured (Discord, Slack, …). With `openclaw agent
