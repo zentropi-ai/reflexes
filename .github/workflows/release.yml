@@ -1,0 +1,33 @@
+name: Release
+
+# On a version tag: build the skill bundle + latest.json and publish a GitHub
+# Release with those assets. The update client (reflexes.update) fetches
+# github.com/zentropi-ai/reflexes/releases/latest/download/latest.json, which
+# GitHub serves from the latest release's uploaded latest.json asset — so
+# publishing the release below is what makes the new version discoverable.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build release assets
+        run: python scripts/make_release_assets.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/reflexes-skill-*.tar.gz
+            dist/latest.json
+

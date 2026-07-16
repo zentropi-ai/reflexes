@@ -1,0 +1,44 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["httpx>=0.27", "pyyaml>=6.0"]
+# ///
+"""Reflexes hook — self-contained, no pip install.
+
+uv provisions httpx+pyyaml into a cached env; the reflexes package is the
+skill's own `reflexes/` dir (one directory up). Dispatch by --host:
+
+  uv run /path/to/skill/scripts/reflexes-hook --host claude-code \
+      --config ~/.reflexes/reflexes.yaml
+"""
+import os
+import sys
+
+# skill/ is the parent of skill/scripts/ and contains the reflexes package.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _dispatch(argv):
+    host = "claude-code"
+    rest = []
+    it = iter(argv)
+    for a in it:
+        if a == "--host":
+            host = next(it, host)
+        else:
+            rest.append(a)
+    sys.argv = [sys.argv[0]] + rest
+    if host in ("claude-code", "claude_code"):
+        from reflexes.integrations.claude_code import main
+    elif host in ("codex", "openai-codex"):
+        from reflexes.integrations.openai_codex import main
+    elif host in ("hermes", "nous-hermes"):
+        from reflexes.integrations.nous_hermes_shell import main
+    else:
+        sys.stderr.write(f"[reflexes] unknown --host {host!r}\n")
+        sys.exit(2)
+    main()
+
+
+if __name__ == "__main__":
+    _dispatch(sys.argv[1:])

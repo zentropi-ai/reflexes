@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reflexes"
+version = "0.1.0"
+description = "Reflexes — open standard for AI agent policy checks."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai-agents>=0.1"]
+otel = ["opentelemetry-api>=1.20", "opentelemetry-sdk>=1.20"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[project.scripts]
+reflexes = "reflexes.__main__:main"
+reflexes-hermes-hook = "reflexes.integrations.nous_hermes_shell:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skill/reflexes"]
+artifacts = [
+    "skill/reflexes/_starter_policies/**/*.md",
+    "skill/reflexes/README.md",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: end-to-end tests that hit real evaluator + LLM APIs (requires ZENTROPI_API_KEY etc.)",
+]
+asyncio_mode = "auto"

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+
+# uv lock file — not committed
+uv.lock
+
+# Local-only working files, not tracked
+_attic/
+
+# npm deps — never track (regenerate via npm install)
+node_modules/
+
+# Claude Code harness scratch (worktrees, etc.)
+.claude/

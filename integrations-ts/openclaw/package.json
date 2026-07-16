@@ -1,0 +1,29 @@
+{
+  "name": "@zentropi/reflexes-openclaw",
+  "version": "0.1.0",
+  "description": "Reflexes for OpenClaw \u2014 an open safety harness for AI agents: inference-time, plain-English policy checks on tool calls and replies.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/plugin.test.js test/policy.test.js test/evaluators.test.js test/readme.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.5.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}
