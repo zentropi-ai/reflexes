@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "reflexes"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reflexes — open standard for AI agent policy checks."
 readme = "README.md"
 license = "Apache-2.0"

@@ -5,6 +5,39 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1]
+
+First tagged release. Ships the release/update channel and a set of
+robustness fixes on top of the 0.1.0 baseline.
+
+### Added
+
+- **Self-update channel.** Releases now publish a `latest.json` asset; the
+  built-in update check (`reflexes.update`, surfaced by `reflexes doctor` and
+  the `SessionStart` hook) fetches it to tell installs when a newer version is
+  available. Fail-silent when unreachable.
+
+### Fixed
+
+- **No false fail-open warning when `reflexes.yaml` omits the `evaluators:`
+  block.** The documented CoPE default is now configured explicitly, so a
+  host's startup check no longer reports "failing open" on a supported config
+  where enforcement actually works.
+
+### Changed
+
+- **Logging polish:** the TypeScript (OpenClaw) debug log records the raw
+  evaluated payload (so tool args aren't truncated away by long task context);
+  log lines are host-tagged without a redundant prefix; the Hermes shell hook
+  emits debug diagnostics. No behavior change at the default level (still no
+  message content).
+- **Install/uninstall doc robustness:** XDG-aware "truly clean" removal, a note
+  that the `cp -n` portability warning is benign, an explicit Codex
+  "wired-but-not-enforcing-until-trusted" callout, the Hermes absolute-interpreter
+  fallback (a missing `uv` on the hook PATH fails open silently), the OpenClaw
+  plugin-id vs. package-name clarification, and library-install expectations
+  (doctor exits 1 with a hosts warning; updates are doctor-only).
+
 ## [0.1.0]
 
 Initial public release.
@@ -62,4 +95,5 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.1.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.0
