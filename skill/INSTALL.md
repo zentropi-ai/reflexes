@@ -104,6 +104,10 @@ cp -n "$SKILL_DIR"/reflexes/_starter_policies/integrity/*.md ~/.reflexes/policie
 cp -n "$SKILL_DIR"/reflexes/_starter_policies/autonomy/*.md  ~/.reflexes/policies/
 ```
 
+(GNU coreutils ≥9 prints `warning: behavior of -n is non-portable … use
+--update=none instead` — it's benign; the existing files are still skipped.
+It's a warning, not an error; don't treat it as a failure.)
+
 Don't resolve them via `python3 -c "import reflexes…"` — a CLI host has no pip
 `reflexes`. You should end with all six policy files in `~/.reflexes/policies/`.
 
@@ -240,6 +244,13 @@ Create `~/.reflexes/hermes-hook.sh`, executable (keep `$HOME` literal):
 exec uv run <SKILL_DIR>/scripts/reflexes-hook --host hermes --config $HOME/.reflexes/reflexes.yaml
 ```
 
+**`uv` must be on the PATH of Hermes' hook-exec environment.** Hermes spawns
+hooks with `shell=False` and treats a failed spawn as "no decision" → a **silent
+fail-open** (enforcement just doesn't run). If `uv` isn't reliably on that PATH,
+use an absolute interpreter instead of `uv run` — point the wrapper at a venv
+that has `reflexes` installed:
+`exec /abs/path/venv/bin/python -m reflexes.integrations.nous_hermes_shell --config $HOME/.reflexes/reflexes.yaml`.
+
 Register its **absolute** path in `~/.hermes/config.yaml` on **all three**
 per-call events (preserve existing) — each maps to a trigger, and an omitted
 event means that trigger's policies **silently never fire**:
@@ -279,6 +290,9 @@ Then:
    ```bash
    openclaw config set plugins.entries.reflexes.hooks.allowConversationAccess true
    ```
+   (The `reflexes` in the config path is the plugin **id** — not the npm package
+   name `@zentropi/reflexes-openclaw` you install with; don't substitute the
+   package name here.)
    OpenClaw gates the `llm_input` and `before_agent_finalize` hooks off for
    third-party plugins by default. Without this flag the plugin still loads and
    `before_tool_call` still fires, but with **no `Current request` context**
@@ -320,6 +334,11 @@ enforcing; `1` = warnings (commonly no API key — wired but not enforcing);
 - **Doctor exit 1 (no key):** Reflexes is wired but not enforcing yet.
   The user must add `ZENTROPI_API_KEY` (free at https://zentropi.ai) or swap
   the evaluator, then re-run the doctor.
+- **Codex, trust not yet granted:** the doctor can't see Codex's hook-trust
+  state, so even a fully-wired Codex install is **not enforcing** until the user
+  runs `/hooks` in Codex, trusts the Reflexes definitions, and restarts. Tell
+  the user this explicitly — it's a distinct "wired but not enforcing" case from
+  the no-key one, and it needs a human (it can't be done headlessly).
 
 Then optionally walk **Verify it works** to see a policy fire.
 
@@ -352,7 +371,15 @@ when the user builds the agent.
 2. Verify it imports: `python -c "import reflexes; print(reflexes.__version__)"`.
 3. Create a project-local `reflexes.yaml` + `policies/` (same shape as
    Step 5, living in the project dir).
-4. Verify: `python -m reflexes doctor --config reflexes.yaml`.
+4. Verify: `python -m reflexes doctor --config reflexes.yaml`. For a library
+   install this exits **1** with a single `hosts: no known agent hosts detected`
+   warning — that's expected (you're not wiring a CLI host); as long as
+   `config`, `evaluator`, and `logging` are ✓, you're good.
+
+Update checks are surfaced only by `reflexes doctor` (and `--check-update`) for
+a library install — the middleware/callbacks don't emit an in-process
+"update available" notice — so run the doctor periodically to learn about new
+releases.
 
 Wiring reference (apply when building the agent):
 
@@ -469,8 +496,11 @@ leave nothing behind, also delete it and the runtime cache (sessions + the
 `debug.log`):
 
 ```bash
-rm -rf ~/.reflexes ~/.cache/reflexes
+rm -rf ~/.reflexes "${XDG_CACHE_HOME:-$HOME/.cache}/reflexes"
 ```
 
-Only do this if you're sure you won't re-install — otherwise the keep-it default
-saves re-writing the config and re-tuning the policies.
+(The runtime cache honors `$XDG_CACHE_HOME` — falling back to `~/.cache` only
+when it's unset — so use the form above; a bare `rm -rf ~/.cache/reflexes` would
+miss the cache on a host with a custom `XDG_CACHE_HOME`.) Only do this if you're
+sure you won't re-install — otherwise the keep-it default saves re-writing the
+config and re-tuning the policies.
