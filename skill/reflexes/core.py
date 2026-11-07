@@ -235,26 +235,31 @@ def configure(
     on evaluator-config failure won't be adopted.
 
     Args:
-        evaluator: Evaluator type — "zentropi", "openai", "anthropic", or "gemini".
+        evaluator: Evaluator type — "zentropi", "systemone", "openai",
+            "anthropic", or "gemini".
         api_key: API key for the evaluator.
         endpoint: Custom endpoint URL.
-        model: Model name/ID. For zentropi: "cope-latest" (default), "cope-b-12b".
+        model: Model name/ID. zentropi: "cope-b-s1" (default). systemone:
+            "cope-b-s1" (default, via OpenRouter) / "jev-latest" / a local model.
     """
     global _evaluator, _evaluator_error
     _evaluator_error = None
 
-    if evaluator not in ("zentropi", "openai", "anthropic", "gemini"):
+    if evaluator not in ("zentropi", "systemone", "openai", "anthropic", "gemini"):
         # Unknown type is a config error, not a runtime / auth issue —
         # surface loud so users can fix their reflexes.yaml.
         raise ValueError(
             f"Unknown evaluator: {evaluator}. "
-            f"Use 'zentropi', 'openai', 'anthropic', or 'gemini'."
+            f"Use 'zentropi', 'systemone', 'openai', 'anthropic', or 'gemini'."
         )
 
     try:
         if evaluator == "zentropi":
             from reflexes.evaluators.zentropi import ZentropiEvaluator
             _evaluator = ZentropiEvaluator(api_key=api_key, endpoint=endpoint, model=model)
+        elif evaluator == "systemone":
+            from reflexes.evaluators.systemone import SystemOneEvaluator
+            _evaluator = SystemOneEvaluator(api_key=api_key, endpoint=endpoint, model=model)
         elif evaluator == "openai":
             from reflexes.evaluators.openai_compatible import OpenAICompatibleEvaluator
             _evaluator = OpenAICompatibleEvaluator(

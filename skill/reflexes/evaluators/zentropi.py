@@ -1,7 +1,8 @@
 """Evaluator using Zentropi's CoPE models via the Zentropi API.
 
-Default model: cope-latest (smart alias → newest CoPE model). Also
-available: cope-b-12b (text + images).
+Default model: cope-b-s1 (the current flagship). This path is single-label
+(``/v1/label``). For multi-policy-in-one-call, use the ``systemone``
+evaluator against a ``/v1/systemone`` endpoint.
 Purpose-built for policy-steerable classification. Fastest and cheapest
 evaluator option.
 
@@ -25,7 +26,9 @@ from reflexes.core import ReflexesUpgradeRequired, Verdict
 logger = logging.getLogger("reflexes.evaluators.zentropi")
 
 DEFAULT_ENDPOINT = "https://api.zentropi.ai/v1/label"
-DEFAULT_MODEL = "cope-latest"
+# Pinned explicitly to cope-b-s1 (the current flagship). NOT "cope-latest":
+# that alias still resolves to cope-b-a4b server-side as of 2026-11.
+DEFAULT_MODEL = "cope-b-s1"
 
 # Transient server-side conditions worth an immediate retry: overload
 # (429/529) and 5xx from the inference service (500/502/503). 529 is the
