@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-07
 
 ### Added
 - **System One evaluator (`type: systemone`).** Speaks the System One decision
@@ -34,6 +34,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `reflexes doctor` now WARNs (not FAILs) when the **zero-config default** is
   missing its `PARASAIL_API_KEY` (install isn't broken, just not enforcing yet);
   an explicitly chosen evaluator missing its key remains a FAIL.
+
+### Upgrading from 0.1.x
+- **Set `PARASAIL_API_KEY`** (free key at https://parasail.io) so the new default
+  evaluator can authenticate — otherwise enforcement fails open (policies don't
+  fire) and `reflexes doctor` reports it.
+- **If you relied on the Zentropi hosted default** (or any keyless behavior),
+  pin it explicitly and provide a key:
+  ```yaml
+  evaluators:
+    default:
+      type: zentropi
+      model: cope-b-s1
+      api_key_env: ZENTROPI_API_KEY
+  ```
+- No policy, binding, or trigger changes are required; this release is additive
+  apart from the default-evaluator switch above.
 
 ## [0.1.1]
 
@@ -125,5 +141,6 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.2.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.2.0
 [0.1.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.0
