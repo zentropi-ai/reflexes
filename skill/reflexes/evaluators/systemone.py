@@ -39,7 +39,9 @@ from reflexes.evaluators._retry import RETRYABLE_STATUS_CODES, MAX_ATTEMPTS, bac
 logger = logging.getLogger("reflexes.evaluators.systemone")
 
 DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/systemone"
-DEFAULT_MODEL = "cope-b-s1"
+# jev-latest for now — Zentropi's cope-b-s1 (same spec) becomes the default here
+# once it's available on OpenRouter; that swap is this one line.
+DEFAULT_MODEL = "jev-latest"
 
 # P(true) at/above which a policy is considered matched (label=1). 0.5 keeps the
 # binary behavior of the older single-label CoPE path; raise it per use case

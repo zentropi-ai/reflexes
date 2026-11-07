@@ -56,23 +56,12 @@ def _envelope(tier: int, error: str, reason: str, action: str) -> dict:
     }
 
 
-@pytest.mark.asyncio
-async def test_tier_zero_init_without_api_key(monkeypatch):
-    """Tier 0 path: api_key=None must not raise on init, and must not send Authorization."""
+def test_missing_api_key_raises(monkeypatch):
+    """The Zentropi API has no keyless tier — constructing without a key must
+    fail fast with a clear message, not send an unauthenticated request."""
     monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
-    seen_headers = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen_headers.update(request.headers)
-        return httpx.Response(200, json={"label": 0, "confidence": 0.9})
-
-    _patched_evaluator(monkeypatch, httpx.MockTransport(handler))
-    ev = zmod.ZentropiEvaluator()  # no api_key, no env var
-    verdict = await ev.evaluate(policy="test policy", content="test content")
-
-    assert isinstance(verdict, Verdict)
-    assert "Authorization" not in seen_headers
-    assert "authorization" not in seen_headers
+    with pytest.raises(ValueError, match="ZENTROPI_API_KEY required"):
+        zmod.ZentropiEvaluator()  # no api_key, no env var
 
 
 @pytest.mark.asyncio

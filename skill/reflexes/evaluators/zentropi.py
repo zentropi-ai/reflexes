@@ -184,13 +184,21 @@ class ZentropiEvaluator:
         endpoint: str | None = None,
         model: str | None = None,
     ):
-        # api_key may still be None here (env unset); the server requires
-        # one and will reject unauthenticated calls. We don't hard-fail
-        # client-side — the request surfaces the auth error (and the
-        # doctor flags a missing key up front with a get-a-key message).
+        # The Zentropi API always requires a key — there is no keyless/anonymous
+        # tier (even the free tier needs a signed-up key). Fail fast with a clear
+        # message rather than sending an unauthenticated request that can only
+        # 401. A self-hosted CoPE server (no auth) is reached with type:systemone
+        # (/v1/systemone) or type:openai (OpenAI-compatible), not type:zentropi.
         self.api_key = api_key or os.environ.get("ZENTROPI_API_KEY")
         self.endpoint = endpoint or DEFAULT_ENDPOINT
         self.model = model or DEFAULT_MODEL
+        if not self.api_key:
+            raise ValueError(
+                "ZENTROPI_API_KEY required for the Zentropi evaluator — the "
+                "hosted API has no keyless tier. Get a free key at "
+                "https://zentropi.ai, set ZENTROPI_API_KEY, or self-host and use "
+                "type: systemone (/v1/systemone) instead."
+            )
 
     async def evaluate(
         self,

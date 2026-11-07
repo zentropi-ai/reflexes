@@ -59,7 +59,7 @@ async def test_single_request_shape_and_parse(monkeypatch):
     assert v.label == 1 and v.mode == "cope"
     assert v.confidence == pytest.approx(0.98)
     body = seen["body"]
-    assert body["model"] == "cope-b-s1"
+    assert body["model"] == "jev-latest"
     assert body["state"] == {"content": "Ships March 15."}
     q = body["questions"]["q0"]
     assert q["type"] == "noul"
@@ -154,4 +154,4 @@ def test_remote_endpoint_requires_key(monkeypatch):
 def test_local_endpoint_keyless_ok(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     ev = s1.SystemOneEvaluator(api_key=None, endpoint="http://localhost:8000/v1/systemone")
-    assert ev.api_key is None and ev.model == "cope-b-s1"
+    assert ev.api_key is None and ev.model == "jev-latest"
