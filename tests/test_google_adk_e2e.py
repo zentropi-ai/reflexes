@@ -156,13 +156,14 @@ def test_task_context_reaches_checks(tmp_path, monkeypatch):
     from google.genai import types
 
     seen = []
-    _orig = adk.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.append(kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(adk, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     agent = LlmAgent(name="ops", model=MODEL,
                      instruction="You must never delete production data.")

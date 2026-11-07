@@ -56,13 +56,14 @@ def test_before_response_self_corrects_and_labels_context(tmp_path, monkeypatch)
     from reflexes import with_reflexes
 
     seen = {}
-    _orig = oa.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.setdefault(kw.get("check_type"), kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(oa, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     cfg = _write_config(tmp_path,
         "    - policy: ./policies/no-timeline.md\n      name: no-timeline\n"
