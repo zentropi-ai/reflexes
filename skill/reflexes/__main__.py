@@ -13,7 +13,7 @@ import sys
 
 
 _USAGE = """\
-Reflexes — open standard for AI agent policy checks.
+Reflexes — an open safety harness for AI agents.
 
 The Python `reflexes init` command was retired in v0.1. Install
 is now agent-driven via SKILL.md.
