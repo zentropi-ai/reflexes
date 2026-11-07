@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { evaluate, loadConfig } from "../dist/index.js";
+import { evaluate, loadConfig, evaluateManySystemOne } from "../dist/index.js";
 
 const DESTRUCTIVE_POLICY =
   "# Criteria\n## Overview\nDetects a request to delete or destroy files or data.\n" +
@@ -175,4 +175,50 @@ test("live: anthropic backend blocks destructive, allows benign", { skip: !proce
   const ok = await evaluate(c, DESTRUCTIVE_POLICY, BENIGN);
   assert.equal(bad.label, "1");
   assert.equal(ok.label, "0");
+});
+
+
+// ---------- System One (multi-label decision model) ----------
+
+test("systemone backend: one /v1/systemone call for N policies, noul→label", async () => {
+  const c = cfg("systemone", {
+    apiBase: "https://openrouter.ai/api/v1/systemone",
+    apiKeyEnv: "TEST_KEY",
+    model: "cope-b-s1",
+  });
+  const rec = recorder({ answers: { q0: { noul: 0.92 }, q1: { noul: 0.10 }, q2: { noul: 0.80 } } });
+  const verdicts = await evaluateManySystemOne(
+    c, ["policy A", "policy B", "policy C"], "some content", { fetchImpl: rec.impl },
+  );
+  // ONE call for all three policies
+  assert.equal(rec.calls.length, 1);
+  const body = rec.calls[0].body;
+  assert.equal(body.model, "cope-b-s1");
+  assert.deepEqual(Object.keys(body.questions), ["q0", "q1", "q2"]);
+  assert.equal(body.questions.q0.type, "noul");
+  assert.match(body.questions.q0.instructions, /policy A$/);
+  assert.ok(body.questions.q0.criteria.true && body.questions.q0.criteria.false);
+  assert.deepEqual(body.state, { content: "some content" });
+  // threshold 0.5: labels and confidence (mass behind the chosen label)
+  assert.deepEqual(verdicts.map((v) => v.label), ["1", "0", "1"]);
+  assert.ok(Math.abs(verdicts[0].confidence - 0.92) < 1e-9);
+  assert.ok(Math.abs(verdicts[1].confidence - 0.90) < 1e-9); // 1 - 0.10
+});
+
+test("systemone via evaluate(): single policy → one-question request", async () => {
+  const c = cfg("systemone", { apiBase: "https://openrouter.ai/api/v1/systemone" });
+  const rec = recorder({ answers: { q0: { noul: 0.99 } } });
+  const v = await evaluate(c, "a policy", "content", { fetchImpl: rec.impl });
+  assert.equal(rec.calls.length, 1);
+  assert.deepEqual(Object.keys(rec.calls[0].body.questions), ["q0"]);
+  assert.equal(v.label, "1");
+});
+
+test("loadConfig fills systemone defaults (OpenRouter + OPENROUTER_API_KEY)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rx-s1-"));
+  const p = join(dir, "reflexes.yaml");
+  writeFileSync(p, "reflexes:\n  default: []\nevaluators:\n  default:\n    type: systemone\n");
+  const c = loadConfig(p);
+  assert.equal(c.evaluator.apiBase, "https://openrouter.ai/api/v1/systemone");
+  assert.equal(c.evaluator.apiKeyEnv, "OPENROUTER_API_KEY");
 });

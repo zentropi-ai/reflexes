@@ -72,7 +72,9 @@ labeler (`zentropi:<labeler_id>[@<version>]`), or a GitHub-hosted file
 cached on first use.
 
 **Evaluator backends.** `type` can be `zentropi` (CoPE — the default and
-safety-tuned), `openai`, `anthropic`, or `gemini`. The LLM backends are general
+safety-tuned), `systemone` (a System One decision model — Zentropi `cope-b-s1`,
+TypeSafe `jev-latest`, or a local one — which evaluates **all policies at a
+decision point in one call**), `openai`, `anthropic`, or `gemini`. The LLM backends are general
 chat models prompted to classify, so they are looser and less calibrated than
 CoPE; for them, set `model`, `api_key_env`, and (if needed) `endpoint`.
 
