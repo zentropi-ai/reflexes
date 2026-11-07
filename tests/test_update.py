@@ -3,6 +3,7 @@
 The update *action* is agent-driven (SKILL.md 'Updating Reflexes'); only the
 check is code, and it must be fast, cached, and fail-silent.
 """
+import json
 import re
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from reflexes import __version__
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_MD = REPO_ROOT / "skill" / "SKILL.md"
+OPENCLAW = REPO_ROOT / "integrations-ts" / "openclaw"
 
 
 def test_version_single_source_of_truth():
@@ -20,6 +22,22 @@ def test_version_single_source_of_truth():
     m = re.search(r'(?m)^\s*version:\s*"?([0-9][^"\n]*?)"?\s*$', SKILL_MD.read_text())
     assert m, "no version in SKILL.md frontmatter"
     assert m.group(1).strip() == vfile, f"SKILL.md {m.group(1)!r} != _version.py {vfile!r}"
+
+
+def test_openclaw_versions_match_version_file():
+    """The OpenClaw (npm) package + plugin versions are hand-maintained strings
+    in a separate language tree — guard them against _version.py so a release
+    can't ship mismatched Python and npm versions.
+
+    pyproject.toml needs no check: its version is dynamic from _version.py
+    (``[tool.hatch.version] path = "skill/reflexes/_version.py"``)."""
+    from reflexes._version import __version__ as vfile
+    for rel in ("package.json", "openclaw.plugin.json"):
+        data = json.loads((OPENCLAW / rel).read_text())
+        assert data["version"] == vfile, (
+            f"{rel} version {data['version']!r} != _version.py {vfile!r} "
+            "— bump both when releasing"
+        )
 
 
 def test_newer_version_returns_notice(monkeypatch, tmp_path):
