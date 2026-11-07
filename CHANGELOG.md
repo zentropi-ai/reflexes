@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-label batching.** Every policy bound to a decision point is evaluated
   in a single System One call (one forward pass) instead of one request per
   policy. Falls back to concurrent single calls for non–System One evaluators.
-  Wired into Claude Code, LangGraph, AutoGen, Claude Agent SDK, CrewAI, NeMo
-  Guardrails, Hermes, Hermes-shell, Pydantic AI, and smolagents.
+  Wired into every integration: Claude Code, OpenAI Codex, LangGraph, Google
+  ADK, OpenAI Agents SDK, Claude Agent SDK, AutoGen, CrewAI, NeMo Guardrails,
+  Hermes (+ shell), Pydantic AI, smolagents, and the OpenClaw TypeScript plugin.
 
 ### Changed
 - Default CoPE model pinned to **`cope-b-s1`** (was `cope-latest`, which still
