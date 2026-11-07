@@ -302,6 +302,10 @@ instead (see below) — no Zentropi key required.
 
 Other evaluators are supported out of the box:
 
+- `type: systemone` — a **System One decision model** (Zentropi `cope-b-s1`,
+  TypeSafe `jev-latest`, or a local one). Evaluates **every policy at a
+  decision point in one call** — one forward pass, not one request per policy.
+  Swap backends with `model` + `endpoint`; the spec is identical.
 - `type: openai` — any OpenAI-compatible endpoint (GPT-4o-mini, Groq, etc.)
 - `type: anthropic` — Claude as evaluator
 - `type: gemini` — Gemini as evaluator

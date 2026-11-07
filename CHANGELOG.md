@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **System One evaluator (`type: systemone`).** Speaks the System One decision
+  spec (`/v1/systemone`); one contract serves Zentropi `cope-b-s1`, TypeSafe
+  `jev-latest`, and local self-deployments — swap with `model` + `endpoint`.
+- **Multi-label batching.** Every policy bound to a decision point is evaluated
+  in a single System One call (one forward pass) instead of one request per
+  policy. Falls back to concurrent single calls for non–System One evaluators.
+  Wired into Claude Code, LangGraph, AutoGen, Claude Agent SDK, CrewAI, NeMo
+  Guardrails, Hermes, Hermes-shell, Pydantic AI, and smolagents.
+
+### Changed
+- Default CoPE model pinned to **`cope-b-s1`** (was `cope-latest`, which still
+  resolves to `cope-b-a4b` server-side).
+- The Zentropi evaluator now **requires an API key** — the hosted API has no
+  keyless tier. Missing key fails open fast with an actionable message; use
+  `type: systemone`/`type: openai` with a local endpoint for self-hosting.
+
 ## [0.1.1]
 
 First tagged release. Ships the release/update channel and a set of
