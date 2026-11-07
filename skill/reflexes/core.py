@@ -44,6 +44,24 @@ _evaluator: Evaluator | None = None
 # instead of a generic "failed to configure". None means "no failure recorded".
 _evaluator_error: str | None = None
 
+# Zero-config default evaluator. When a reflexes.yaml has no `evaluators:` block
+# (or configure() was never called), this is what runs: Zentropi's CoPE model
+# cope-b-s1, served over Parasail's System One endpoint. Parasail is picked as
+# the out-of-the-box default because it's a live, functional endpoint today —
+# set PARASAIL_API_KEY and policies fire with no further config. Absent the key,
+# configure() fails open like any missing-key default (policies simply don't
+# fire yet; the host keeps running). Swap to any evaluator via reflexes.yaml.
+DEFAULT_EVALUATOR = "systemone"
+DEFAULT_MODEL = "parasail-cope-b-s1"
+DEFAULT_ENDPOINT = "https://api.parasail.io/v1/systemone"
+DEFAULT_API_KEY_ENV = "PARASAIL_API_KEY"
+
+# True when the currently-configured evaluator is the zero-config default above
+# (not an explicit user choice). The doctor reads this to decide WARN vs FAIL on
+# a missing key: a missing key for the *default* is a soft "not enforcing yet,"
+# while a missing key for an *explicitly chosen* evaluator is a config error.
+_default_evaluator_active: bool = False
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -242,8 +260,11 @@ def configure(
         model: Model name/ID. zentropi: "cope-b-s1" (default). systemone:
             "cope-b-s1" (default, via OpenRouter) / "jev-latest" / a local model.
     """
-    global _evaluator, _evaluator_error
+    global _evaluator, _evaluator_error, _default_evaluator_active
     _evaluator_error = None
+    # An explicit configure() call is, by definition, not the zero-config
+    # default. _configure_default() flips this back on after delegating here.
+    _default_evaluator_active = False
 
     if evaluator not in ("zentropi", "systemone", "openai", "anthropic", "gemini"):
         # Unknown type is a config error, not a runtime / auth issue —
@@ -297,28 +318,37 @@ def configure(
         _evaluator_error = f"{evaluator} evaluator: {e}"
 
 
+def _configure_default() -> None:
+    """Configure the zero-config default evaluator — Zentropi CoPE (cope-b-s1)
+    over Parasail's System One endpoint. Pulls the key from ``PARASAIL_API_KEY``;
+    if it's unset, ``configure()`` fails open (``_evaluator`` left None, host
+    keeps running) exactly as any other missing-key default would.
+
+    Marks ``_default_evaluator_active`` so the doctor can tell this apart from an
+    explicitly chosen evaluator when deciding WARN vs FAIL on a missing key.
+    """
+    global _default_evaluator_active
+    configure(
+        evaluator=DEFAULT_EVALUATOR,
+        api_key=os.environ.get(DEFAULT_API_KEY_ENV),
+        endpoint=DEFAULT_ENDPOINT,
+        model=DEFAULT_MODEL,
+    )
+    _default_evaluator_active = True
+
+
 def _get_evaluator() -> Evaluator | None:
     """Return the configured evaluator, or None if configure() couldn't
     instantiate one. Callers MUST handle None and treat it as evaluator-
     unavailable (return EvaluatorError, fail open per SPEC §4.3).
 
-    On first call without prior ``configure()``, attempts a default
-    Zentropi instantiation; if that fails the function returns None
-    rather than raising.
+    On first call without prior ``configure()``, attempts the zero-config
+    default (CoPE via Parasail — see ``_configure_default``); if that fails
+    (e.g. missing ``PARASAIL_API_KEY``) the function returns None rather than
+    raising.
     """
-    global _evaluator
     if _evaluator is None:
-        try:
-            from reflexes.evaluators.zentropi import ZentropiEvaluator
-            _evaluator = ZentropiEvaluator()
-        except Exception as e:
-            _logger_module = logging.getLogger("reflexes.core")
-            _logger_module.warning(
-                "No evaluator configured and default Zentropi instantiation "
-                "failed (%s); evaluation will fail open.",
-                e,
-            )
-            return None
+        _configure_default()
     return _evaluator
 
 

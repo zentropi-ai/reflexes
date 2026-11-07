@@ -19,11 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hermes (+ shell), Pydantic AI, smolagents, and the OpenClaw TypeScript plugin.
 
 ### Changed
+- **Zero-config default evaluator is now CoPE (`cope-b-s1`) over Parasail's
+  System One endpoint** (`type: systemone`, `https://api.parasail.io/v1/systemone`,
+  key from `PARASAIL_API_KEY`). When `reflexes.yaml` has no `evaluators:` block,
+  this is what runs — a live, functional endpoint out of the box that also
+  batches every policy at a decision point into one call. Previously the default
+  was the Zentropi hosted single-label API; that remains available as
+  `type: zentropi`.
 - Default CoPE model pinned to **`cope-b-s1`** (was `cope-latest`, which still
   resolves to `cope-b-a4b` server-side).
 - The Zentropi evaluator now **requires an API key** — the hosted API has no
   keyless tier. Missing key fails open fast with an actionable message; use
   `type: systemone`/`type: openai` with a local endpoint for self-hosting.
+- `reflexes doctor` now WARNs (not FAILs) when the **zero-config default** is
+  missing its `PARASAIL_API_KEY` (install isn't broken, just not enforcing yet);
+  an explicitly chosen evaluator missing its key remains a FAIL.
 
 ## [0.1.1]
 

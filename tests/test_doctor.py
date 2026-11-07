@@ -48,17 +48,38 @@ def test_find_config_prefers_explicit(tmp_path):
     assert _find_config(str(tmp_path / "nope.yaml")) is None
 
 
-def test_missing_zentropi_key_is_warn_not_fail(tmp_path, monkeypatch):
-    """Product decision: a missing Zentropi API key is a clean WARN (get a
-    free key or swap the evaluator), NOT a hard FAIL. The install shouldn't
-    read as a crash — the doctor runs, warns, and exits 1, not 2."""
+def test_missing_default_key_is_warn_not_fail(tmp_path, monkeypatch):
+    """Product decision: a missing key for the ZERO-CONFIG DEFAULT (CoPE via
+    Parasail — a config with no `evaluators:` block) is a clean WARN (get a key
+    or swap the evaluator), NOT a hard FAIL. The install shouldn't read as a
+    crash — the doctor runs, warns, and exits 1, not 2."""
     from reflexes.doctor import _check_evaluator
-    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
-    cfg = _write_config(tmp_path)  # type: zentropi, no key available
+    monkeypatch.delenv("PARASAIL_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    pol = tmp_path / "policies"
+    pol.mkdir()
+    (pol / "p.md").write_text("# Criteria\n\n## Overview\nAlways fires.\n")
+    cfg = tmp_path / "reflexes.yaml"
+    cfg.write_text(  # reflexes only, NO evaluators block → zero-config default
+        "reflexes:\n  default:\n    - policy: ./policies/p.md\n"
+        "      name: p\n      trigger: before_tool_call\n      action: deny\n"
+    )
     status, msg = _check_evaluator(cfg)
     assert status == "warn", f"expected warn, got {status!r}: {msg}"
-    assert "zentropi.ai" in msg.lower()  # tells the user how to get a key
-    assert "swap" in msg.lower()          # and the alternative
+    assert "parasail" in msg.lower()  # tells the user how to get a key
+    assert "swap" in msg.lower()       # and the alternative
+
+
+def test_missing_explicit_zentropi_key_is_fail(tmp_path, monkeypatch):
+    """An explicitly chosen evaluator (even Zentropi) missing its key is now a
+    config error to fix → FAIL with the specific cause. Only the zero-config
+    default gets the softer WARN."""
+    from reflexes.doctor import _check_evaluator
+    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
+    cfg = _write_config(tmp_path)  # explicit type: zentropi, no key available
+    status, msg = _check_evaluator(cfg)
+    assert status == "fail", f"expected fail, got {status!r}: {msg}"
+    assert "ZENTROPI_API_KEY" in msg  # names the specific missing env var
 
 
 def test_missing_remote_evaluator_key_names_the_specific_cause(tmp_path, monkeypatch):

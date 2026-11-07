@@ -153,11 +153,17 @@ def configure_from_file(config_file: str | Path = "reflexes.yaml"):
     """Read the 'evaluators' section from reflexes.yaml and configure the
     default evaluator (the first one listed).
 
+    With no `evaluators:` block, the zero-config default is used: Zentropi CoPE
+    (cope-b-s1) over Parasail's System One endpoint (see
+    `reflexes.core._configure_default`).
+
     Example:
         evaluators:
           cope:
-            type: zentropi
-            model: cope-latest
+            type: systemone
+            model: parasail-cope-b-s1
+            endpoint: https://api.parasail.io/v1/systemone
+            api_key_env: PARASAIL_API_KEY
 
           gpt-oss:
             type: openai
@@ -188,15 +194,17 @@ def configure_from_file(config_file: str | Path = "reflexes.yaml"):
 
     evaluators = raw.get("evaluators")
     if not evaluators:
-        # No `evaluators:` block → the documented default is CoPE (Zentropi).
-        # Configure it explicitly so `_evaluator` is set, exactly as if the user
-        # had written `evaluators: {default: {type: zentropi}}`. Returning here
-        # instead (the old behavior) left `_evaluator` None, which a host's
-        # startup gate reads as a fail-open — a FALSE alarm, since `_get_evaluator`
-        # would lazily instantiate the same default and enforcement works. A
-        # genuinely missing key still surfaces at eval time (401 → EvaluatorError)
-        # and via the doctor, so the safe signal isn't lost — only the false one.
-        configure(evaluator="zentropi")
+        # No `evaluators:` block → the zero-config default: CoPE (cope-b-s1) via
+        # Parasail's System One endpoint. Configure it explicitly so `_evaluator`
+        # is set, exactly as if the user had written the equivalent `evaluators:`
+        # block. Returning here instead (the old behavior) left `_evaluator` None,
+        # which a host's startup gate reads as a fail-open — a FALSE alarm, since
+        # `_get_evaluator` would lazily instantiate the same default and
+        # enforcement works. A genuinely missing key still surfaces at eval time
+        # (401 → EvaluatorError) and via the doctor, so the safe signal isn't
+        # lost — only the false one.
+        from reflexes.core import _configure_default
+        _configure_default()
         return
 
     # Use 'default' if it exists, otherwise the first listed

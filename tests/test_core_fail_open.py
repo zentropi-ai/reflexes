@@ -37,8 +37,13 @@ def fresh_core(monkeypatch):
     directly is enough.
     """
     monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
+    # The zero-config default is CoPE via Parasail; clear its key (and the
+    # systemone OpenRouter fallback key) so the lazy/default paths fail open.
+    monkeypatch.delenv("PARASAIL_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     import reflexes.core as core
     core._evaluator = None
+    core._default_evaluator_active = False
     return core
 
 
@@ -59,10 +64,12 @@ def test_configure_zentropi_no_key_fails_open(fresh_core):
 
 
 def test_get_evaluator_lazy_default_fails_open_without_key(fresh_core):
-    """Lazy default-Zentropi instantiation with no key returns None (fail open),
-    not a dead keyless client."""
+    """Lazy default (CoPE via Parasail) instantiation with no key returns None
+    (fail open), not a dead keyless client."""
     assert fresh_core._get_evaluator() is None
     assert fresh_core._evaluator is None
+    # The default path still ran (and marked itself), it just couldn't authenticate.
+    assert fresh_core._default_evaluator_active is True
 
 
 @pytest.mark.asyncio
@@ -78,8 +85,8 @@ async def test_acheck_raises_clear_error_when_no_evaluator(fresh_core, monkeypat
     def _fail_init(*args, **kwargs):
         raise RuntimeError("simulated init failure")
 
-    import reflexes.evaluators.zentropi as zmod
-    monkeypatch.setattr(zmod, "ZentropiEvaluator", _fail_init)
+    import reflexes.evaluators.systemone as smod
+    monkeypatch.setattr(smod, "SystemOneEvaluator", _fail_init)
 
     with pytest.raises(RuntimeError, match="No evaluator configured"):
         await fresh_core.acheck(policy="dummy", content="dummy")

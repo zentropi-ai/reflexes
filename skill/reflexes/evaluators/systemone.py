@@ -5,15 +5,19 @@ typed ``questions`` and return a calibrated decision for each — all in a
 single forward pass. That makes multi-policy evaluation at one decision
 point a SINGLE API call instead of one call per policy.
 
-Reflexes default backend is Zentropi's ``cope-b-s1`` via OpenRouter; the
-same spec is implemented by TypeSafe's ``jev-latest`` and by a local
-self-deployment, so switching backends is just model + endpoint:
+Reflexes' zero-config default backend is Zentropi's ``cope-b-s1`` served over
+Parasail (``https://api.parasail.io/v1/systemone``, key from
+``PARASAIL_API_KEY`` — see ``reflexes.core.DEFAULT_*``). The same spec is
+implemented by TypeSafe's ``jev-latest`` (OpenRouter) and by a local
+self-deployment, so switching backends is just model + endpoint. (This
+evaluator's own fallback default, when ``type: systemone`` is given with no
+model/endpoint, is ``jev-latest`` on OpenRouter — see ``DEFAULT_MODEL`` below.)
 
     evaluators:
       default:
         type: systemone
-        model: cope-b-s1        # or try jev-latest
-        endpoint: https://openrouter.ai/api/v1/systemone   # or a local self-deployment
+        model: parasail-cope-b-s1        # or jev-latest, or cope-b-s1 on a local deploy
+        endpoint: https://api.parasail.io/v1/systemone   # or OpenRouter / a local self-deployment
 
 Each Reflexes policy becomes one ``noul`` (true/false) question using the
 content-policy convention: the model returns ``P(true)`` — the probability
