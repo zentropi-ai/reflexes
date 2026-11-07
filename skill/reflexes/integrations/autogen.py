@@ -31,7 +31,7 @@ import asyncio
 import json
 import logging
 
-from reflexes.core import safe_acheck, build_feedback, EvaluatorError
+from reflexes.core import safe_acheck, safe_acheck_many, build_feedback, EvaluatorError
 from reflexes._context import assemble_task_context
 
 MAX_CONCURRENT = 10
@@ -138,15 +138,9 @@ def create_intervention_handler(
     async def _evaluate(content: str, trigger_bindings: list[ReflexBinding],
                         context: str | None = None, check_type: str | None = None):
         """Evaluate content against bindings in parallel. Returns DropMessage class if denied, else None."""
-        sem = asyncio.Semaphore(MAX_CONCURRENT)
-
-        async def _eval_one(binding):
-            async with sem:
-                verdict = await safe_acheck(policy=binding.policy.criteria, policy_name=binding.policy.name, content=content,
-                                       context=context, check_type=check_type or "Content")
-                return binding, verdict
-
-        results = await asyncio.gather(*[_eval_one(b) for b in trigger_bindings])
+        _specs = [(b.policy.criteria, b.policy.name) for b in trigger_bindings]
+        _verdicts = await safe_acheck_many(_specs, content, context=context, check_type=check_type or "Content")
+        results = list(zip(trigger_bindings, _verdicts))
 
         for binding, verdict in results:
             if isinstance(verdict, EvaluatorError):

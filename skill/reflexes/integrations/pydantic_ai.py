@@ -26,7 +26,7 @@ import asyncio
 import logging
 
 from reflexes.core import (
-    safe_acheck, ReflexDenied, build_feedback, EvaluatorError, format_upgrade_notice,
+    safe_acheck, safe_acheck_many, ReflexDenied, build_feedback, EvaluatorError, format_upgrade_notice,
 )
 from reflexes._context import assemble_task_context
 
@@ -108,18 +108,9 @@ async def _evaluate_parallel(
     Returns ``(matches, upgrade)`` — matches is a list of (binding, verdict), and
     upgrade is the first tier/capability upgrade condition seen (or None), so the
     caller can surface the fail-open notice to the agent."""
-    sem = asyncio.Semaphore(MAX_CONCURRENT)
-
-    async def _eval_one(binding):
-        async with sem:
-            verdict = await safe_acheck(
-                policy=binding.policy.criteria, policy_name=binding.policy.name,
-                content=content, context=context, check_type=check_type,
-                context_label=context_label,
-            )
-            return binding, verdict
-
-    results = await asyncio.gather(*[_eval_one(b) for b in bindings])
+    _specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+    _verdicts = await safe_acheck_many(_specs, content, context=context, check_type=check_type, context_label=context_label)
+    results = list(zip(bindings, _verdicts))
     matches = []
     upgrade = None
     for binding, verdict in results:

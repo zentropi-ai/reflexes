@@ -63,7 +63,7 @@ def captured_safe_acheck(monkeypatch):
     captured: list[dict] = []
 
     async def _fake(*, policy, content, policy_name, context=None,
-                    check_type="Content", policy_slug=None):
+                    check_type="Content", policy_slug=None, **kw):
         captured.append({
             "policy_name": policy_name, "content": content,
             "context": context, "check_type": check_type,
@@ -71,8 +71,8 @@ def captured_safe_acheck(monkeypatch):
         # Return label=1 for every call — exercises the matched-policy path.
         return Verdict(label=1, confidence=0.95, reason="stub-match")
 
-    import reflexes.integrations.nous_hermes as nh
-    monkeypatch.setattr(nh, "safe_acheck", _fake)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", _fake)
     return captured
 
 
@@ -240,9 +240,10 @@ def test_handle_no_findings_returns_none(hermes_env, monkeypatch):
     import reflexes.integrations.nous_hermes as nh
 
     async def _no_match(*, policy, content, policy_name, context=None,
-                        check_type="Content", policy_slug=None):
+                        check_type="Content", policy_slug=None, **kw):
         return Verdict(label=0, confidence=0.05, reason="no match")
-    monkeypatch.setattr(nh, "safe_acheck", _no_match)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", _no_match)
 
     result = nh.handle("agent:step", {"response": "anything"})
     assert result is None
@@ -258,7 +259,8 @@ def test_handle_swallows_exceptions_returns_none(hermes_env, monkeypatch):
 
     async def _explode(*args, **kwargs):
         raise RuntimeError("simulated evaluator failure")
-    monkeypatch.setattr(nh, "safe_acheck", _explode)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", _explode)
 
     # Should not raise; should not return findings.
     assert nh.handle("agent:step", {"response": "x"}) is None

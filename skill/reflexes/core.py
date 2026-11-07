@@ -594,3 +594,29 @@ def safe_check(
     except Exception as e:
         _logger.error("Evaluator failed for policy '%s': %s", policy_name, e)
         return EvaluatorError(policy_name=policy_name, error=str(e))
+
+
+def safe_check_many(
+    policies: list[tuple],
+    content: str,
+    *,
+    context: str | None = None,
+    check_type: str = "Content",
+    context_label: str = "User request",
+    host: str | None = None,
+    trigger: str | None = None,
+) -> list[Verdict | EvaluatorError]:
+    """Sync wrapper for ``safe_acheck_many`` — one batched System One call for
+    all policies where the evaluator supports it, else concurrent singles. For
+    sync integrations (smolagents, crewai). See ``safe_acheck_many``."""
+    coro = safe_acheck_many(
+        policies, content, context=context, check_type=check_type,
+        context_label=context_label, host=host, trigger=trigger,
+    )
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(coro)).result()

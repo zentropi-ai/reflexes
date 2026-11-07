@@ -83,13 +83,14 @@ def test_before_response_deny_drops_with_context(tmp_path, monkeypatch):
     from autogen_agentchat.messages import TextMessage
 
     seen = []
-    _orig = ag.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.append(kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(ag, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     handler = _handler(tmp_path, "before_response", _TIMELINE, "no-timeline")
 

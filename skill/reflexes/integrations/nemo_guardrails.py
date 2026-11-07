@@ -69,7 +69,7 @@ import asyncio
 import json
 import logging
 
-from reflexes.core import safe_acheck, EvaluatorError
+from reflexes.core import safe_acheck, safe_acheck_many, EvaluatorError
 
 MAX_CONCURRENT = 10
 from reflexes.config import load_config, ReflexBinding, configure_from_file
@@ -124,15 +124,9 @@ def register_reflex_actions(
         """Evaluate all bindings in parallel. Returns True if safe, False if a
         deny matched. Evaluator failures fail open (True) with a log — the
         fail-open notice is baseline-only on NeMo (see module note)."""
-        sem = asyncio.Semaphore(MAX_CONCURRENT)
-
-        async def _eval_one(binding):
-            async with sem:
-                verdict = await safe_acheck(policy=binding.policy.criteria, policy_name=binding.policy.name, content=content,
-                                       context=context, check_type=check_type or "Content")
-                return binding, verdict
-
-        results = await asyncio.gather(*[_eval_one(b) for b in trigger_bindings])
+        _specs = [(b.policy.criteria, b.policy.name) for b in trigger_bindings]
+        _verdicts = await safe_acheck_many(_specs, content, context=context, check_type=check_type or "Content")
+        results = list(zip(trigger_bindings, _verdicts))
 
         for binding, verdict in results:
             if isinstance(verdict, EvaluatorError):

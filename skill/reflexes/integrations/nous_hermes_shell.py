@@ -392,7 +392,7 @@ def main(host: str = "hermes") -> None:
 
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from reflexes.config import load_config, configure_from_file
-    from reflexes.core import safe_acheck, EvaluatorError, build_feedback, format_upgrade_notice
+    from reflexes.core import safe_acheck, safe_acheck_many, EvaluatorError, build_feedback, format_upgrade_notice
     from reflexes.observability import configure_logging
 
     # Tag log lines with the host; Hermes logs to stderr (no shared file), but
@@ -471,21 +471,11 @@ def main(host: str = "hermes") -> None:
     check_type = _CHECK_TYPE.get(trigger, "Content")
     context_label = "Task context" if task_context else "User request"
 
-    async def _evaluate_all():
-        sem = asyncio.Semaphore(max_concurrent())
-
-        async def _eval_one(binding):
-            async with sem:
-                return binding, await safe_acheck(
-                    binding.policy.criteria, content,
-                    policy_name=binding.policy.name,
-                    context=task_context, check_type=check_type,
-                    context_label=context_label,
-                )
-
-        return await asyncio.gather(*[_eval_one(b) for b in bindings])
-
-    results = asyncio.run(_evaluate_all())
+    _specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+    results = list(zip(bindings, asyncio.run(safe_acheck_many(
+        _specs, content, context=task_context, check_type=check_type,
+        context_label=context_label,
+    ))))
 
     upgrade_notice: str | None = None
     flag_notes: list[str] = []

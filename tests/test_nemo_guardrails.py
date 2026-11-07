@@ -24,7 +24,8 @@ class _FakeRails:
 def _wire(monkeypatch, bindings, safe_acheck):
     monkeypatch.setattr(nemo, "configure_from_file", lambda *a, **k: None)
     monkeypatch.setattr(nemo, "load_config", lambda **k: bindings)
-    monkeypatch.setattr(nemo, "safe_acheck", safe_acheck)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", safe_acheck)
     rails = _FakeRails()
     nemo.register_reflex_actions(rails, config_file="x.yaml")
     return rails
@@ -37,7 +38,7 @@ def _binding(trigger, action="deny"):
 
 def test_output_action_reads_bot_message_from_context(monkeypatch):
     seen = {}
-    async def _stub(policy, policy_name, content, context=None, check_type=None):
+    async def _stub(policy=None, policy_name=None, content=None, context=None, check_type=None, **kw):
         seen["content"] = content
         seen["check_type"] = check_type
         return Verdict(label=0, confidence=0.9)  # safe
@@ -51,7 +52,7 @@ def test_output_action_reads_bot_message_from_context(monkeypatch):
 
 
 def test_output_action_deny_blocks(monkeypatch):
-    async def _match(policy, policy_name, content, context=None, check_type=None):
+    async def _match(policy=None, policy_name=None, content=None, context=None, check_type=None, **kw):
         return Verdict(label=1, confidence=0.99)  # matches → deny
     rails = _wire(monkeypatch, [_binding("before_response")], _match)
     result = asyncio.run(rails.actions["reflex_check_output"](
@@ -61,7 +62,7 @@ def test_output_action_deny_blocks(monkeypatch):
 
 def test_input_action_reads_user_message_from_context(monkeypatch):
     seen = {}
-    async def _stub(policy, policy_name, content, context=None, check_type=None):
+    async def _stub(policy=None, policy_name=None, content=None, context=None, check_type=None, **kw):
         seen["content"] = content
         return Verdict(label=0, confidence=0.9)
     rails = _wire(monkeypatch, [_binding("on_input")], _stub)
@@ -72,7 +73,7 @@ def test_input_action_reads_user_message_from_context(monkeypatch):
 
 def test_explicit_arg_still_works_as_fallback(monkeypatch):
     seen = {}
-    async def _stub(policy, policy_name, content, context=None, check_type=None):
+    async def _stub(policy=None, policy_name=None, content=None, context=None, check_type=None, **kw):
         seen["content"] = content
         return Verdict(label=0, confidence=0.9)
     rails = _wire(monkeypatch, [_binding("before_response")], _stub)

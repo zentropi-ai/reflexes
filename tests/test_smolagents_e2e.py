@@ -90,13 +90,14 @@ def test_before_response_self_correct_signal(tmp_path, monkeypatch):
     import reflexes.integrations.smolagents as sm
 
     seen = []
-    _orig = sm.safe_check
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
-    def _rec(**kw):
+    async def _rec(**kw):
         seen.append(kw.get("context"))
-        return _orig(**kw)
+        return await _orig(**kw)
 
-    monkeypatch.setattr(sm, "safe_check", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     bindings = _bindings(tmp_path, "before_response", _TIMELINE, "no-timeline")
     check = sm._make_final_answer_check(bindings)
@@ -120,13 +121,14 @@ def test_after_tool_call_deny(tmp_path, monkeypatch):
     from reflexes.core import ReflexDenied
 
     seen = []
-    _orig = sm.safe_check
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
-    def _rec(**kw):
+    async def _rec(**kw):
         seen.append(kw.get("context"))
-        return _orig(**kw)
+        return await _orig(**kw)
 
-    monkeypatch.setattr(sm, "safe_check", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     bindings = _bindings(tmp_path, "after_tool_call", _DESTRUCTIVE, "no-delete")
     cb = sm._make_action_callback(bindings)

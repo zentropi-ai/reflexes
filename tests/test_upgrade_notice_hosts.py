@@ -89,7 +89,8 @@ async def test_claude_agent_sdk_injects_upgrade_note_once(monkeypatch):
     async def _stub_safe_acheck(**kwargs):
         return EvaluatorError(policy_name="Sycophancy", error=str(up), upgrade=up)
 
-    monkeypatch.setattr(cas, "safe_acheck", _stub_safe_acheck)
+    import reflexes.core as _core2
+    monkeypatch.setattr(_core2, "safe_acheck", _stub_safe_acheck)
     hook = cas._make_pre_tool_use_hook([_Binding()], cas._SessionMemory())
 
     out1 = await hook({"tool_name": "Bash", "tool_input": {"cmd": "ls"}}, "id", {})
