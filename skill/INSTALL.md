@@ -157,7 +157,7 @@ reflexes:
 evaluators:
   default:
     type: zentropi
-    model: cope-latest
+    model: cope-b-s1
     api_key_env: ZENTROPI_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---

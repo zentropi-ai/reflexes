@@ -94,7 +94,7 @@ reflexes:                # WHAT is enforced — named groups of bindings
 evaluators:              # WHO scores content against the policies
   default:
     type: zentropi
-    model: cope-latest
+    model: cope-b-s1
     api_key_env: ZENTROPI_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
@@ -272,8 +272,23 @@ The evaluator scores content against a policy. Default is Zentropi's CoPE model,
 ```yaml
 evaluators:
   default:
-    type: zentropi
-    model: cope-latest
+    type: systemone                 # evaluates ALL policies at a decision point in ONE call
+    model: jev-latest               # or cope-b-s1 once it's on OpenRouter
+    endpoint: https://openrouter.ai/api/v1/systemone   # or a local self-deployment
+    api_key_env: OPENROUTER_API_KEY
+```
+
+A System One model (Zentropi's `cope-b-s1`, TypeSafe's `jev-latest`, or a
+self-hosted one) reads the content once and returns a calibrated decision for
+every bound policy in a single forward pass — so a decision point with several
+policies is one request, not one per policy. Swap backends with `model` +
+`endpoint`; the spec is identical.
+
+```yaml
+evaluators:
+  default:
+    type: zentropi                  # Zentropi hosted API, single-label (/v1/label)
+    model: cope-b-s1
     api_key_env: ZENTROPI_API_KEY   # required — free key: https://zentropi.ai
 ```
 

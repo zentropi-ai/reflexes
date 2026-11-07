@@ -94,6 +94,10 @@ def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
                 "have a key for (see 'Swap the Evaluator'). Re-run this "
                 "doctor afterward to confirm enforcement is live.",
             )
+        # An explicitly-chosen remote evaluator (systemone/OpenRouter, openai,
+        # anthropic, gemini) missing its key is a config error the user must
+        # fix → FAIL with the specific cause. (Only the default Zentropi path
+        # gets the softer WARN above.)
         return (_FAIL, f"evaluator failed to configure — {reason}")
     probe_criteria = "Label = 1 when the content contains the word REFLEXES_DOCTOR_PROBE.\nLabel = 0 otherwise."
     t0 = time.monotonic()
