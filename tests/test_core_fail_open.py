@@ -48,22 +48,21 @@ def test_configure_with_unknown_evaluator_raises(fresh_core):
         fresh_core.configure(evaluator="not-a-real-evaluator")
 
 
-def test_configure_zentropi_no_key_uses_tier_zero(fresh_core):
-    """Missing API key MUST NOT crash the host — instantiates the Tier 0
-    keyless evaluator instead. The server gates Tier 0 limits via
-    tier-aware 401/429 envelopes (covered in test_zentropi_evaluator.py).
-    """
+def test_configure_zentropi_no_key_fails_open(fresh_core):
+    """Missing API key MUST NOT crash the host. The Zentropi API has no keyless
+    tier, so with no key configure() fails OPEN: _evaluator is None and the
+    stashed error explains the missing key (acheck→safe_acheck then returns an
+    EvaluatorError, host continues)."""
     fresh_core.configure(evaluator="zentropi")  # no api_key, no env
-    assert fresh_core._evaluator is not None
-    assert fresh_core._evaluator.api_key is None
+    assert fresh_core._evaluator is None
+    assert "ZENTROPI_API_KEY required" in (fresh_core._evaluator_error or "")
 
 
-def test_get_evaluator_lazy_default_uses_tier_zero(fresh_core):
-    """First-call default-Zentropi instantiation succeeds in Tier 0 mode."""
-    ev = fresh_core._get_evaluator()
-    assert ev is not None
-    assert fresh_core._evaluator is not None
-    assert fresh_core._evaluator.api_key is None
+def test_get_evaluator_lazy_default_fails_open_without_key(fresh_core):
+    """Lazy default-Zentropi instantiation with no key returns None (fail open),
+    not a dead keyless client."""
+    assert fresh_core._get_evaluator() is None
+    assert fresh_core._evaluator is None
 
 
 @pytest.mark.asyncio

@@ -117,7 +117,7 @@ async def test_tier_zero_429_envelope_raises_without_retry(monkeypatch):
         )
 
     _patched_evaluator(monkeypatch, httpx.MockTransport(handler))
-    ev = zmod.ZentropiEvaluator()
+    ev = zmod.ZentropiEvaluator(api_key="test-key")
 
     with pytest.raises(ReflexesUpgradeRequired) as exc_info:
         await ev.evaluate(policy="p", content="c")
@@ -249,7 +249,7 @@ async def test_upgrade_notice_stderr_print_deduplicated(monkeypatch, capsys):
         )
 
     _patched_evaluator(monkeypatch, httpx.MockTransport(handler))
-    ev = zmod.ZentropiEvaluator()
+    ev = zmod.ZentropiEvaluator(api_key="test-key")
 
     for _ in range(3):
         with pytest.raises(ReflexesUpgradeRequired):
@@ -305,7 +305,7 @@ async def test_resolved_policy_header_logged_at_debug(monkeypatch, caplog):
         )
 
     _patched_evaluator(monkeypatch, httpx.MockTransport(handler))
-    ev = zmod.ZentropiEvaluator()
+    ev = zmod.ZentropiEvaluator(api_key="test-key")
 
     with caplog.at_level(logging.DEBUG, logger="reflexes.evaluators.zentropi"):
         await ev.evaluate(policy="p", content="c")
@@ -322,7 +322,7 @@ async def test_envelope_with_missing_optional_fields_does_not_crash(monkeypatch)
         return httpx.Response(401, json={"tier": 0, "error": "auth_required"})
 
     _patched_evaluator(monkeypatch, httpx.MockTransport(handler))
-    ev = zmod.ZentropiEvaluator()
+    ev = zmod.ZentropiEvaluator(api_key="test-key")
 
     with pytest.raises(ReflexesUpgradeRequired) as exc_info:
         await ev.evaluate(policy="p", content="c")
