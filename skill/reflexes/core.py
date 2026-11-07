@@ -486,6 +486,97 @@ async def safe_acheck(
             return EvaluatorError(policy_name=policy_name, error=str(e))
 
 
+async def safe_acheck_many(
+    policies: list[tuple],
+    content: str,
+    *,
+    context: str | None = None,
+    check_type: str = "Content",
+    context_label: str = "User request",
+    host: str | None = None,
+    trigger: str | None = None,
+) -> list[Verdict | EvaluatorError]:
+    """Evaluate many policies against ONE content, returning results in order.
+
+    ``policies`` is a list of ``(criteria, name)`` or ``(criteria, name, slug)``.
+    All policies share the same content/context (the common case: every binding
+    at one decision point).
+
+    If the configured evaluator supports batch evaluation (System One models),
+    this is a SINGLE call for all policies — the whole point of a System One
+    model. Otherwise it falls back to concurrent ``safe_acheck`` calls, capped
+    at ``max_concurrent()`` exactly as the per-policy path was.
+
+    Never raises on a transient/infra failure — each policy fails open with an
+    ``EvaluatorError`` (same contract as ``safe_acheck``). An ``auth_required``
+    envelope still fails CLOSED (re-raises), preserving the security contract.
+    """
+    specs = [(p[0], p[1], p[2] if len(p) > 2 else None) for p in policies]
+    if not specs:
+        return []
+
+    evaluator = _get_evaluator()
+    batch_fn = getattr(evaluator, "evaluate_batch", None) if evaluator is not None else None
+
+    # Fallback: no batch-capable evaluator, or a single policy (nothing to
+    # bundle). Concurrent single calls, capped like the old per-binding path.
+    if batch_fn is None or len(specs) == 1:
+        sem = asyncio.Semaphore(max_concurrent())
+
+        async def _one(criteria, name, slug):
+            async with sem:
+                return await safe_acheck(
+                    policy=criteria, content=content, policy_name=name,
+                    context=context, check_type=check_type,
+                    context_label=context_label, host=host, trigger=trigger,
+                    policy_slug=slug,
+                )
+
+        return list(await asyncio.gather(*[_one(c, n, s) for (c, n, s) in specs]))
+
+    # Batch path — one evaluator call for all policies. Assemble content exactly
+    # as acheck does, so a batched verdict is identical to its single-call form.
+    from reflexes import observability as _obs
+    evaluator_type = evaluator.__class__.__name__
+    assembled = _assemble_content(content, context, check_type, context_label)
+    try:
+        verdicts = await batch_fn(
+            policies=[(slug or name, criteria) for (criteria, name, slug) in specs],
+            content=assembled,
+        )
+        if len(verdicts) != len(specs):
+            raise RuntimeError(
+                f"batch evaluator returned {len(verdicts)} verdicts for "
+                f"{len(specs)} policies"
+            )
+    except ReflexesUpgradeRequired as e:
+        # Same two-tier dispatch as safe_acheck: auth_required fails closed.
+        _obs.increment_verdict_counter("upgrade_required")
+        if e.error == "auth_required":
+            raise
+        return [EvaluatorError(policy_name=n, error=str(e), upgrade=e) for (_, n, _) in specs]
+    except Exception as e:
+        _logger.error("Batch evaluator failed for %d policies: %s", len(specs), e)
+        _obs.increment_verdict_counter("error")
+        return [EvaluatorError(policy_name=n, error=str(e)) for (_, n, _) in specs]
+
+    # Record per-policy verdicts (one span each, as the single path does); one
+    # latency sample for the shared batch call, not K.
+    latency_done = False
+    for (_criteria, name, _slug), verdict in zip(specs, verdicts):
+        with _obs.evaluator_span(
+            policy_name=name, evaluator_type=evaluator_type, host=host, trigger=trigger,
+        ) as _span:
+            _obs.record_verdict(
+                _span, label=verdict.label, confidence=verdict.confidence,
+                latency_ms=verdict.latency_ms,
+            )
+        if not latency_done and verdict.latency_ms is not None:
+            _obs.record_latency(evaluator_type, verdict.latency_ms)
+            latency_done = True
+    return list(verdicts)
+
+
 def safe_check(
     policy: str,
     content: str,

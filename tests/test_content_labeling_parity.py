@@ -60,7 +60,7 @@ def captured_safe_acheck_for_langgraph(monkeypatch):
 
     async def _fake_safe_acheck(
         *, policy, content, policy_name, context=None, check_type="Content",
-        policy_slug=None,
+        policy_slug=None, **kw,
     ):
         captured.append({
             "policy": policy,
@@ -71,8 +71,8 @@ def captured_safe_acheck_for_langgraph(monkeypatch):
         })
         return Verdict(label=0, confidence=0.1, reason="stub")
 
-    import reflexes.integrations.langgraph as lg
-    monkeypatch.setattr(lg, "safe_acheck", _fake_safe_acheck)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", _fake_safe_acheck)
     return captured
 
 

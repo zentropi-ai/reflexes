@@ -124,7 +124,8 @@ async def test_langgraph_evaluate_bindings_returns_upgrade(monkeypatch):
     async def _stub_safe_acheck(**kwargs):
         return EvaluatorError(policy_name="Sycophancy", error=str(up), upgrade=up)
 
-    monkeypatch.setattr(lg, "safe_acheck", _stub_safe_acheck)
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", _stub_safe_acheck)
     matches, upgrade = await lg._evaluate_bindings([_Binding()], "content")
     assert matches == []
     assert upgrade is up

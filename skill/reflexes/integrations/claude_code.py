@@ -869,28 +869,18 @@ def _main_body(
         if user_context:
             logger.debug("Task context for evaluation (%d chars): %s", len(user_context), user_context[:100])
 
-    # Evaluate all matching policies in parallel (cap: max_concurrent(),
-    # default 10, override REFLEXES_MAX_CONCURRENT).
-    from reflexes.core import max_concurrent
+    # Evaluate all matching policies against this content. With a System One
+    # evaluator this is ONE batched call (all policies, one forward pass);
+    # otherwise concurrent single calls capped at max_concurrent().
+    # safe_acheck_many handles both and preserves the fail-open contract.
+    from reflexes.core import safe_acheck_many
 
-    async def _evaluate_all():
-        sem = asyncio.Semaphore(max_concurrent())
-
-        async def _eval_one(binding):
-            async with sem:
-                logger.debug("Evaluating policy '%s' (action=%s)...", binding.policy.name, binding.action)
-                verdict = await safe_acheck(
-                    policy=binding.policy.criteria, content=content,
-                    policy_name=binding.policy.name,
-                    context=user_context, check_type=check_type,
-                    context_label=context_label,
-                )
-                return binding, verdict
-
-        tasks = [_eval_one(b) for b in matching]
-        return await asyncio.gather(*tasks)
-
-    results = asyncio.run(_evaluate_all())
+    specs = [(b.policy.criteria, b.policy.name) for b in matching]
+    verdicts = asyncio.run(safe_acheck_many(
+        specs, content, context=user_context, check_type=check_type,
+        context_label=context_label, trigger=trigger,
+    ))
+    results = list(zip(matching, verdicts))
 
     # Process results — first deny wins, then flags, then logs
     deny_result = None
