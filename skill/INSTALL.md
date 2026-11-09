@@ -229,8 +229,9 @@ Add the `[features]` header if it's absent; if the user has `hooks` set to
 
 **(b) Trust the hooks.** Codex won't run command hooks until the user has
 reviewed and **trusted** them — an untrusted hook looks wired but never fires
-(fail open). Tell the user to open Codex, run `/hooks`, review the Reflexes
-definitions, and trust them, then restart Codex. (Editing a hook's command later
+(fail open). Tell the user to review the Reflexes definitions and trust them:
+in the **Codex CLI**, run `/hooks`; in the **Codex app** (Codex in ChatGPT), open
+**Settings → Hooks**. Then restart Codex. (Editing a hook's command later
 changes its hash and requires trusting it again.)
 
 `reflexes-doctor` confirms (a) but **cannot see Codex's trust state**, so it
@@ -339,7 +340,8 @@ enforcing; `1` = warnings (commonly no API key — wired but not enforcing);
   https://parasail.io) or swap the evaluator, then re-run the doctor.
 - **Codex, trust not yet granted:** the doctor can't see Codex's hook-trust
   state, so even a fully-wired Codex install is **not enforcing** until the user
-  runs `/hooks` in Codex, trusts the Reflexes definitions, and restarts. Tell
+  trusts the Reflexes definitions — in the Codex CLI via `/hooks`, or in the
+  Codex app (Codex in ChatGPT) via **Settings → Hooks** — and restarts. Tell
   the user this explicitly — it's a distinct "wired but not enforcing" case from
   the no-key one, and it needs a human (it can't be done headlessly).
 
@@ -419,11 +421,12 @@ options = ClaudeAgentOptions(
 - **Codex does nothing:** usually one of two host-side gates — (1) hooks not
   enabled: add `hooks = true` under the `[features]` table in
   `~/.codex/config.toml` (a bare top-level key is ignored); `reflexes-doctor`
-  flags this. Or (2) hooks not **trusted**: run
-  `/hooks` in Codex, trust the Reflexes definitions, and restart — Codex
-  silently skips untrusted hooks (same symptom as an unreachable evaluator:
-  fail-open), and editing a hook re-requires trust. The doctor can't see trust
-  state, so it warns you to verify (2) yourself by triggering a known policy.
+  flags this. Or (2) hooks not **trusted**: trust the Reflexes definitions
+  (Codex CLI: run `/hooks`; Codex app in ChatGPT: **Settings → Hooks**) and
+  restart — Codex silently skips untrusted hooks (same symptom as an unreachable
+  evaluator: fail-open), and editing a hook re-requires trust. The doctor can't
+  see trust state, so it warns you to verify (2) yourself by triggering a known
+  policy.
 
 ## Re-running
 
