@@ -86,13 +86,14 @@ def test_task_context_reaches_tool_check(tmp_path, monkeypatch):
     import reflexes.integrations.claude_agent_sdk as cas
 
     seen = []
-    _orig = cas.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.append(kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(cas, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     from reflexes.integrations.claude_agent_sdk import create_hooks
 
@@ -124,13 +125,14 @@ def test_task_context_absent_without_prompt(tmp_path, monkeypatch):
     import reflexes.integrations.claude_agent_sdk as cas
 
     seen = []
-    _orig = cas.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.append(kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(cas, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     from reflexes.integrations.claude_agent_sdk import create_hooks
 

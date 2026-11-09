@@ -34,7 +34,7 @@ from typing import Any
 MAX_CONCURRENT = 10
 
 from reflexes.core import (
-    safe_acheck, Verdict, ReflexDenied, build_feedback, EvaluatorError,
+    safe_acheck, safe_acheck_many, Verdict, ReflexDenied, build_feedback, EvaluatorError,
     format_upgrade_notice,
 )
 from reflexes.config import ReflexBinding
@@ -96,18 +96,13 @@ async def _evaluate_bindings(
     check_type: str = "Content",
 ) -> list[tuple[ReflexBinding, Verdict]]:
     """Evaluate content against all bindings in parallel, return matches."""
-    sem = asyncio.Semaphore(MAX_CONCURRENT)
-
-    async def _eval_one(binding):
-        async with sem:
-            verdict = await safe_acheck(
-                policy=binding.policy.criteria, content=content,
-                policy_name=binding.policy.name,
-                context=context, check_type=check_type,
-            )
-            return binding, verdict
-
-    results = await asyncio.gather(*[_eval_one(b) for b in bindings])
+    # One batched call with a System One evaluator; otherwise concurrent single
+    # calls (safe_acheck_many handles both and preserves fail-open semantics).
+    specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+    verdicts = await safe_acheck_many(
+        specs, content, context=context, check_type=check_type,
+    )
+    results = list(zip(bindings, verdicts))
     matches = []
     upgrade = None
     for binding, verdict in results:

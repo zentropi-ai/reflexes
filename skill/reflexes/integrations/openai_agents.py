@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 
-from reflexes.core import safe_acheck, Verdict, build_feedback, EvaluatorError
+from reflexes.core import safe_acheck, safe_acheck_many, Verdict, build_feedback, EvaluatorError
 from reflexes.config import ReflexBinding
 
 logger = logging.getLogger("reflexes.openai")
@@ -105,22 +105,27 @@ def _recent_input(ctx) -> str | None:
     return None
 
 
-def _make_input_guardrail(binding: ReflexBinding):
+def _make_input_guardrail(bindings: list[ReflexBinding]):
+    # ONE guardrail for all on_input bindings: one System One call for the lot,
+    # tripwire on the first deny (any deny blocks the run, as it did with one
+    # guardrail per binding); non-blocking flag/log infos are collected into
+    # output_info (observable on the run result).
     from agents import InputGuardrail, GuardrailFunctionOutput
 
     async def _check(ctx, agent, input_data):
         content = input_data if isinstance(input_data, str) else str(input_data)
-        verdict = await safe_acheck(policy=binding.policy.criteria, policy_name=binding.policy.name, content=content)
-        should_block, info = _handle_verdict(binding, verdict)
-        return GuardrailFunctionOutput(
-            output_info=info,
-            tripwire_triggered=should_block,
-        )
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(specs, content)
+        infos = []
+        for binding, verdict in zip(bindings, verdicts):
+            should_block, info = _handle_verdict(binding, verdict)
+            if should_block:
+                return GuardrailFunctionOutput(output_info=info, tripwire_triggered=True)
+            if info is not None:
+                infos.append(info)
+        return GuardrailFunctionOutput(output_info=(infos or None), tripwire_triggered=False)
 
-    return InputGuardrail(
-        guardrail_function=_check,
-        name=f"reflex:{binding.policy.name}",
-    )
+    return InputGuardrail(guardrail_function=_check, name="reflex:on_input")
 
 
 def _build_task_context(*, recent_input: str | None, agent_instructions: str | None) -> tuple[str | None, str]:
@@ -141,7 +146,7 @@ def _build_task_context(*, recent_input: str | None, agent_instructions: str | N
     return None, "User request"
 
 
-def _make_output_guardrail(binding: ReflexBinding, agent_instructions: str | None = None):
+def _make_output_guardrail(bindings: list[ReflexBinding], agent_instructions: str | None = None):
     from agents import OutputGuardrail, GuardrailFunctionOutput
 
     async def _check(ctx, agent, output_data):
@@ -155,24 +160,24 @@ def _make_output_guardrail(binding: ReflexBinding, agent_instructions: str | Non
         task_context, context_label = _build_task_context(
             recent_input=recent_input, agent_instructions=instructions,
         )
-        verdict = await safe_acheck(
-            policy=binding.policy.criteria, policy_name=binding.policy.name,
-            content=content, context=task_context, check_type="Agent response",
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Agent response",
             context_label=context_label,
         )
-        should_block, info = _handle_verdict(binding, verdict)
-        return GuardrailFunctionOutput(
-            output_info=info,
-            tripwire_triggered=should_block,
-        )
+        infos = []
+        for binding, verdict in zip(bindings, verdicts):
+            should_block, info = _handle_verdict(binding, verdict)
+            if should_block:
+                return GuardrailFunctionOutput(output_info=info, tripwire_triggered=True)
+            if info is not None:
+                infos.append(info)
+        return GuardrailFunctionOutput(output_info=(infos or None), tripwire_triggered=False)
 
-    return OutputGuardrail(
-        guardrail_function=_check,
-        name=f"reflex:{binding.policy.name}",
-    )
+    return OutputGuardrail(guardrail_function=_check, name="reflex:before_response")
 
 
-def _make_tool_input_guardrail(binding: ReflexBinding, agent_instructions: str | None = None):
+def _make_tool_input_guardrail(bindings: list[ReflexBinding], agent_instructions: str | None = None):
     from agents import ToolInputGuardrail, ToolGuardrailFunctionOutput
 
     async def _check(data):
@@ -183,25 +188,23 @@ def _make_tool_input_guardrail(binding: ReflexBinding, agent_instructions: str |
         task_context, context_label = _build_task_context(
             recent_input=recent_input, agent_instructions=agent_instructions,
         )
-        verdict = await safe_acheck(
-            policy=binding.policy.criteria, policy_name=binding.policy.name,
-            content=content, context=task_context, check_type="Tool call",
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Tool call",
             context_label=context_label,
         )
-        should_block, info = _handle_verdict(binding, verdict)
-        if should_block:
-            return ToolGuardrailFunctionOutput.reject_content(
-                build_feedback(binding.trigger, binding.policy.criteria)
-            )
+        for binding, verdict in zip(bindings, verdicts):
+            should_block, _info = _handle_verdict(binding, verdict)
+            if should_block:
+                return ToolGuardrailFunctionOutput.reject_content(
+                    build_feedback(binding.trigger, binding.policy.criteria)
+                )
         return ToolGuardrailFunctionOutput.allow()
 
-    return ToolInputGuardrail(
-        guardrail_function=_check,
-        name=f"reflex:{binding.policy.name}",
-    )
+    return ToolInputGuardrail(guardrail_function=_check, name="reflex:before_tool_call")
 
 
-def _make_tool_output_guardrail(binding: ReflexBinding, agent_instructions: str | None = None):
+def _make_tool_output_guardrail(bindings: list[ReflexBinding], agent_instructions: str | None = None):
     from agents import ToolOutputGuardrail, ToolGuardrailFunctionOutput
 
     async def _check(data):
@@ -212,22 +215,20 @@ def _make_tool_output_guardrail(binding: ReflexBinding, agent_instructions: str 
         task_context, context_label = _build_task_context(
             recent_input=recent_input, agent_instructions=agent_instructions,
         )
-        verdict = await safe_acheck(
-            policy=binding.policy.criteria, policy_name=binding.policy.name,
-            content=content, context=task_context, check_type="Tool result",
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Tool result",
             context_label=context_label,
         )
-        should_block, info = _handle_verdict(binding, verdict)
-        if should_block:
-            return ToolGuardrailFunctionOutput.reject_content(
-                build_feedback(binding.trigger, binding.policy.criteria)
-            )
+        for binding, verdict in zip(bindings, verdicts):
+            should_block, _info = _handle_verdict(binding, verdict)
+            if should_block:
+                return ToolGuardrailFunctionOutput.reject_content(
+                    build_feedback(binding.trigger, binding.policy.criteria)
+                )
         return ToolGuardrailFunctionOutput.allow()
 
-    return ToolOutputGuardrail(
-        guardrail_function=_check,
-        name=f"reflex:{binding.policy.name}",
-    )
+    return ToolOutputGuardrail(guardrail_function=_check, name="reflex:after_tool_call")
 
 
 def apply_reflexes(agent, bindings: list[ReflexBinding]):
@@ -260,20 +261,25 @@ def apply_reflexes(agent, bindings: list[ReflexBinding]):
     raw_instructions = getattr(agent, "instructions", None)
     agent_instructions = raw_instructions if isinstance(raw_instructions, str) else None
 
+    # Group bindings by trigger and make ONE guardrail per trigger that batches
+    # all of that trigger's policies into a single System One call. (The SDK runs
+    # one guardrail per binding would fan out to one request each.)
+    known = {"on_input", "before_response", "before_tool_call", "after_tool_call"}
+    for binding in bindings:
+        if binding.trigger not in known:
+            raise ValueError(f"Unknown trigger: {binding.trigger}")
+    by_trigger = {t: [b for b in bindings if b.trigger == t] for t in known}
+
     tool_input_guardrails = []
     tool_output_guardrails = []
-
-    for binding in bindings:
-        if binding.trigger == "on_input":
-            agent.input_guardrails.append(_make_input_guardrail(binding))
-        elif binding.trigger == "before_response":
-            agent.output_guardrails.append(_make_output_guardrail(binding, agent_instructions))
-        elif binding.trigger == "before_tool_call":
-            tool_input_guardrails.append(_make_tool_input_guardrail(binding, agent_instructions))
-        elif binding.trigger == "after_tool_call":
-            tool_output_guardrails.append(_make_tool_output_guardrail(binding, agent_instructions))
-        else:
-            raise ValueError(f"Unknown trigger: {binding.trigger}")
+    if by_trigger["on_input"]:
+        agent.input_guardrails.append(_make_input_guardrail(by_trigger["on_input"]))
+    if by_trigger["before_response"]:
+        agent.output_guardrails.append(_make_output_guardrail(by_trigger["before_response"], agent_instructions))
+    if by_trigger["before_tool_call"]:
+        tool_input_guardrails.append(_make_tool_input_guardrail(by_trigger["before_tool_call"], agent_instructions))
+    if by_trigger["after_tool_call"]:
+        tool_output_guardrails.append(_make_tool_output_guardrail(by_trigger["after_tool_call"], agent_instructions))
 
     if tool_input_guardrails or tool_output_guardrails:
         for tool in getattr(agent, "tools", []):

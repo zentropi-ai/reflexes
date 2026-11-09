@@ -1,7 +1,8 @@
 """Evaluator using Zentropi's CoPE models via the Zentropi API.
 
-Default model: cope-latest (smart alias → newest CoPE model). Also
-available: cope-b-12b (text + images).
+Default model: cope-b-s1 (the current flagship). This path is single-label
+(``/v1/label``). For multi-policy-in-one-call, use the ``systemone``
+evaluator against a ``/v1/systemone`` endpoint.
 Purpose-built for policy-steerable classification. Fastest and cheapest
 evaluator option.
 
@@ -25,7 +26,9 @@ from reflexes.core import ReflexesUpgradeRequired, Verdict
 logger = logging.getLogger("reflexes.evaluators.zentropi")
 
 DEFAULT_ENDPOINT = "https://api.zentropi.ai/v1/label"
-DEFAULT_MODEL = "cope-latest"
+# Pinned explicitly to cope-b-s1 (the current flagship). NOT "cope-latest":
+# that alias still resolves to cope-b-a4b server-side as of 2026-11.
+DEFAULT_MODEL = "cope-b-s1"
 
 # Transient server-side conditions worth an immediate retry: overload
 # (429/529) and 5xx from the inference service (500/502/503). 529 is the
@@ -181,13 +184,21 @@ class ZentropiEvaluator:
         endpoint: str | None = None,
         model: str | None = None,
     ):
-        # api_key may still be None here (env unset); the server requires
-        # one and will reject unauthenticated calls. We don't hard-fail
-        # client-side — the request surfaces the auth error (and the
-        # doctor flags a missing key up front with a get-a-key message).
+        # The Zentropi API always requires a key — there is no keyless/anonymous
+        # tier (even the free tier needs a signed-up key). Fail fast with a clear
+        # message rather than sending an unauthenticated request that can only
+        # 401. A self-hosted CoPE server (no auth) is reached with type:systemone
+        # (/v1/systemone) or type:openai (OpenAI-compatible), not type:zentropi.
         self.api_key = api_key or os.environ.get("ZENTROPI_API_KEY")
         self.endpoint = endpoint or DEFAULT_ENDPOINT
         self.model = model or DEFAULT_MODEL
+        if not self.api_key:
+            raise ValueError(
+                "ZENTROPI_API_KEY required for the Zentropi evaluator — the "
+                "hosted API has no keyless tier. Get a free key at "
+                "https://zentropi.ai, set ZENTROPI_API_KEY, or self-host and use "
+                "type: systemone (/v1/systemone) instead."
+            )
 
     async def evaluate(
         self,

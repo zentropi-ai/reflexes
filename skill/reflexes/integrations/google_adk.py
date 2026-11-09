@@ -25,7 +25,7 @@ import json
 import logging
 
 from reflexes.core import (
-    safe_acheck, Verdict, build_feedback, EvaluatorError, format_upgrade_notice,
+    safe_acheck, safe_acheck_many, Verdict, build_feedback, EvaluatorError, format_upgrade_notice,
 )
 from reflexes.config import ReflexBinding
 
@@ -63,24 +63,26 @@ def _add_flag_to_state(ctx, entry: dict):
 
 def _make_before_model_callbacks(bindings: list[ReflexBinding]) -> list:
     """Create before_model_callback functions for on_input bindings."""
-    callbacks = []
+    # ONE callback that evaluates all on_input bindings in a single System One
+    # call (when supported); first deny in binding order wins, as it did when
+    # ADK ran one callback per binding and used the first non-None return.
+    async def _callback(*, callback_context, llm_request):
+        content = None
+        if llm_request.contents:
+            for c in reversed(llm_request.contents):
+                if c.role == "user" and c.parts:
+                    content = c.parts[0].text if hasattr(c.parts[0], "text") else str(c.parts[0])
+                    break
+        if not content:
+            return None
 
-    for binding in bindings:
-        async def _callback(*, callback_context, llm_request, _binding=binding):
-            content = None
-            if llm_request.contents:
-                for c in reversed(llm_request.contents):
-                    if c.role == "user" and c.parts:
-                        content = c.parts[0].text if hasattr(c.parts[0], "text") else str(c.parts[0])
-                        break
-            if not content:
-                return None
-
-            verdict = await safe_acheck(policy=_binding.policy.criteria, policy_name=_binding.policy.name, content=content)
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(specs, content)
+        for _binding, verdict in zip(bindings, verdicts):
             if isinstance(verdict, EvaluatorError):
                 _surface_upgrade(callback_context, verdict.upgrade)
                 logger.warning("Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
-                return None
+                continue
             if verdict.label == 1:
                 if _binding.action == "deny":
                     from google.adk.models.llm_response import LlmResponse
@@ -96,11 +98,9 @@ def _make_before_model_callbacks(bindings: list[ReflexBinding]) -> list:
                     _add_flag_to_state(callback_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
                     logger.warning("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
-            return None
+        return None
 
-        callbacks.append(_callback)
-
-    return callbacks
+    return [_callback]
 
 
 def _build_task_context(*, recent_input: str | None, agent_instruction: str | None) -> tuple[str | None, str]:
@@ -118,33 +118,31 @@ def _build_task_context(*, recent_input: str | None, agent_instruction: str | No
 
 def _make_after_model_callbacks(bindings: list[ReflexBinding], agent_instruction: str | None = None) -> list:
     """Create after_model_callback functions for before_response bindings."""
-    callbacks = []
+    async def _callback(*, callback_context, llm_response):
+        content = None
+        if llm_response.content and llm_response.content.parts:
+            content = llm_response.content.parts[0].text if hasattr(llm_response.content.parts[0], "text") else str(llm_response.content.parts[0])
+        if not content:
+            return None
 
-    for binding in bindings:
-        async def _callback(*, callback_context, llm_response, _binding=binding):
-            content = None
-            if llm_response.content and llm_response.content.parts:
-                content = llm_response.content.parts[0].text if hasattr(llm_response.content.parts[0], "text") else str(llm_response.content.parts[0])
-            if not content:
-                return None
+        recent_input = None
+        if hasattr(callback_context, "user_content") and callback_context.user_content:
+            uc = callback_context.user_content
+            if hasattr(uc, "parts") and uc.parts:
+                recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
 
-            recent_input = None
-            if hasattr(callback_context, "user_content") and callback_context.user_content:
-                uc = callback_context.user_content
-                if hasattr(uc, "parts") and uc.parts:
-                    recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
-
-            task_context, context_label = _build_task_context(
-                recent_input=recent_input, agent_instruction=agent_instruction,
-            )
-            verdict = await safe_acheck(
-                policy=_binding.policy.criteria, policy_name=_binding.policy.name, content=content,
-                context=task_context, check_type="Agent response", context_label=context_label,
-            )
+        task_context, context_label = _build_task_context(
+            recent_input=recent_input, agent_instruction=agent_instruction,
+        )
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Agent response", context_label=context_label,
+        )
+        for _binding, verdict in zip(bindings, verdicts):
             if isinstance(verdict, EvaluatorError):
                 _surface_upgrade(callback_context, verdict.upgrade)
                 logger.warning("Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
-                return None
+                continue
             if verdict.label == 1:
                 if _binding.action == "deny":
                     from google.adk.models.llm_response import LlmResponse
@@ -166,39 +164,35 @@ def _make_after_model_callbacks(bindings: list[ReflexBinding], agent_instruction
                     _add_flag_to_state(callback_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
                     logger.warning("Reflex %s matched (confidence=%.2f)", _binding.policy.name, verdict.confidence)
-            return None
+        return None
 
-        callbacks.append(_callback)
-
-    return callbacks
+    return [_callback]
 
 
 def _make_before_tool_callbacks(bindings: list[ReflexBinding], agent_instruction: str | None = None) -> list:
     """Create before_tool_callback functions for before_tool_call bindings."""
-    callbacks = []
+    async def _callback(*, tool, args, tool_context):
+        tool_name = getattr(tool, "name", str(tool))
+        content = f"{tool_name}({json.dumps(args)})"
 
-    for binding in bindings:
-        async def _callback(*, tool, args, tool_context, _binding=binding):
-            tool_name = getattr(tool, "name", str(tool))
-            content = f"{tool_name}({json.dumps(args)})"
+        recent_input = None
+        if hasattr(tool_context, "user_content") and tool_context.user_content:
+            uc = tool_context.user_content
+            if hasattr(uc, "parts") and uc.parts:
+                recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
 
-            recent_input = None
-            if hasattr(tool_context, "user_content") and tool_context.user_content:
-                uc = tool_context.user_content
-                if hasattr(uc, "parts") and uc.parts:
-                    recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
-
-            task_context, context_label = _build_task_context(
-                recent_input=recent_input, agent_instruction=agent_instruction,
-            )
-            verdict = await safe_acheck(
-                policy=_binding.policy.criteria, policy_name=_binding.policy.name, content=content,
-                context=task_context, check_type="Tool call", context_label=context_label,
-            )
+        task_context, context_label = _build_task_context(
+            recent_input=recent_input, agent_instruction=agent_instruction,
+        )
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Tool call", context_label=context_label,
+        )
+        for _binding, verdict in zip(bindings, verdicts):
             if isinstance(verdict, EvaluatorError):
                 _surface_upgrade(tool_context, verdict.upgrade)
                 logger.warning("Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
-                return None
+                continue
             if verdict.label == 1:
                 if _binding.action == "deny":
                     return {"error": build_feedback("before_tool_call", _binding.policy.criteria)}
@@ -207,40 +201,36 @@ def _make_before_tool_callbacks(bindings: list[ReflexBinding], agent_instruction
                     _add_flag_to_state(tool_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
                     logger.warning("Reflex %s matched tool %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
-            return None
+        return None
 
-        callbacks.append(_callback)
-
-    return callbacks
+    return [_callback]
 
 
 def _make_after_tool_callbacks(bindings: list[ReflexBinding], agent_instruction: str | None = None) -> list:
     """Create after_tool_callback functions for after_tool_call bindings."""
-    callbacks = []
+    async def _callback(*, tool, args, tool_context, tool_response):
+        tool_name = getattr(tool, "name", str(tool))
+        result_str = json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response)
+        content = f"{tool_name} returned: {result_str}"
 
-    for binding in bindings:
-        async def _callback(*, tool, args, tool_context, tool_response, _binding=binding):
-            tool_name = getattr(tool, "name", str(tool))
-            result_str = json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response)
-            content = f"{tool_name} returned: {result_str}"
+        recent_input = None
+        if hasattr(tool_context, "user_content") and tool_context.user_content:
+            uc = tool_context.user_content
+            if hasattr(uc, "parts") and uc.parts:
+                recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
 
-            recent_input = None
-            if hasattr(tool_context, "user_content") and tool_context.user_content:
-                uc = tool_context.user_content
-                if hasattr(uc, "parts") and uc.parts:
-                    recent_input = uc.parts[0].text if hasattr(uc.parts[0], "text") else str(uc.parts[0])
-
-            task_context, context_label = _build_task_context(
-                recent_input=recent_input, agent_instruction=agent_instruction,
-            )
-            verdict = await safe_acheck(
-                policy=_binding.policy.criteria, policy_name=_binding.policy.name, content=content,
-                context=task_context, check_type="Tool result", context_label=context_label,
-            )
+        task_context, context_label = _build_task_context(
+            recent_input=recent_input, agent_instruction=agent_instruction,
+        )
+        specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+        verdicts = await safe_acheck_many(
+            specs, content, context=task_context, check_type="Tool result", context_label=context_label,
+        )
+        for _binding, verdict in zip(bindings, verdicts):
             if isinstance(verdict, EvaluatorError):
                 _surface_upgrade(tool_context, verdict.upgrade)
                 logger.warning("Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
-                return None
+                continue
             if verdict.label == 1:
                 if _binding.action == "deny":
                     return {"error": build_feedback("after_tool_call", _binding.policy.criteria)}
@@ -249,11 +239,9 @@ def _make_after_tool_callbacks(bindings: list[ReflexBinding], agent_instruction:
                     _add_flag_to_state(tool_context, _build_flag_entry(_binding, verdict))
                 elif _binding.action == "log":
                     logger.warning("Reflex %s matched tool output from %s (confidence=%.2f)", _binding.policy.name, tool_name, verdict.confidence)
-            return None
+        return None
 
-        callbacks.append(_callback)
-
-    return callbacks
+    return [_callback]
 
 
 def apply_reflexes(agent, bindings: list[ReflexBinding]):

@@ -1,6 +1,9 @@
 {
   "name": "@zentropi/reflexes-openclaw",
-  "version": "0.1.1",
+  "version": "0.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Reflexes for OpenClaw \u2014 an open safety harness for AI agents: inference-time, plain-English policy checks on tool calls and replies.",
   "license": "Apache-2.0",
   "type": "module",

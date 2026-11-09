@@ -4,8 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "reflexes"
-version = "0.1.1"
-description = "Reflexes — open standard for AI agent policy checks."
+# Version is the single source of truth in skill/reflexes/_version.py — read
+# dynamically below so the PyPI metadata can't drift from the runtime version.
+dynamic = ["version"]
+description = "Reflexes — an open safety harness for AI agents."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -23,6 +25,9 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 [project.scripts]
 reflexes = "reflexes.__main__:main"
 reflexes-hermes-hook = "reflexes.integrations.nous_hermes_shell:main"
+
+[tool.hatch.version]
+path = "skill/reflexes/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["skill/reflexes"]

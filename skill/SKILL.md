@@ -8,7 +8,7 @@ description: >
   stop and ask the user.
 metadata:
   author: zentropi
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Reflexes
@@ -18,8 +18,9 @@ Reflexes is an open safety harness for AI agents: at inference time it checks ea
 Reflexes is stewarded by **Zentropi** (https://zentropi.ai) and is open source with an open specification.
 
 **Before you start.** A host-CLI install needs Python 3.10+,
-[`uv`](https://docs.astral.sh/uv/), and — for the default evaluator — a free
-`ZENTROPI_API_KEY` (https://zentropi.ai); full steps are in `INSTALL.md`.
+[`uv`](https://docs.astral.sh/uv/), and — for the default CoPE-via-Parasail
+evaluator — a `PARASAIL_API_KEY` (https://parasail.io); full steps are in
+`INSTALL.md`.
 Throughout, **`SKILL_DIR`** = this skill's own directory (it holds `SKILL.md`,
 `INSTALL.md`, `scripts/`, and `reflexes/`).
 
@@ -34,7 +35,7 @@ file*). The pieces it wires together:
 - **Trigger** — *when* a policy is checked: `on_input`, `before_tool_call`, `after_tool_call`, or `before_response`.
 - **Action** — *what happens* on a match: `deny` (block and feed the policy back so the agent self-corrects), `flag`, or `log`.
 - **Binding** — a line in `reflexes.yaml` tying a policy to a trigger and an action.
-- **Evaluator** — the model that scores content against a policy to decide whether it matches. The default is **CoPE**, Zentropi's small open model purpose-built to classify content against a plain-English policy (you can also use OpenAI, Anthropic, or Gemini).
+- **Evaluator** — the model that scores content against a policy to decide whether it matches. The default is **CoPE**, Zentropi's small open model purpose-built to classify content against a plain-English policy — served out of the box over Parasail's System One endpoint (set `PARASAIL_API_KEY`). You can also use any System One backend, OpenAI, Anthropic, or Gemini.
 
 At runtime, Reflexes checks the agent at each trigger, asks the evaluator whether
 the bound policies match, and on a match takes the action — such as `deny`,
@@ -52,7 +53,7 @@ A host-CLI install bundles six **starter policies** into `~/.reflexes/policies/`
 As Reflexes is a **safety harness**, treat these as hard rules:
 
 - **Follow the steps in order; don't improvise.** If a check fails, **stop and ask the user** — don't invent a workaround.
-- **The doctor is your proof.** `reflexes-doctor` verifies enforcement is actually live — the config parses, policies load, and the evaluator answers a live probe. Reflexes fails *open* (a config typo or an unreachable evaluator silently degrades to "every check passes"), so **run it after any config change**: `uv run <SKILL_DIR>/scripts/reflexes-doctor --config ~/.reflexes/reflexes.yaml`. Read the exit code — **0** = enforcing (green); **1** = wired but not fully enforcing (warnings to fix, e.g. a missing `ZENTROPI_API_KEY`); **2** = fail-open risk (stop and fix before relying on it).
+- **The doctor is your proof.** `reflexes-doctor` verifies enforcement is actually live — the config parses, policies load, and the evaluator answers a live probe. Reflexes fails *open* (a config typo or an unreachable evaluator silently degrades to "every check passes"), so **run it after any config change**: `uv run <SKILL_DIR>/scripts/reflexes-doctor --config ~/.reflexes/reflexes.yaml`. Read the exit code — **0** = enforcing (green); **1** = wired but not fully enforcing (warnings to fix, e.g. a missing `PARASAIL_API_KEY`); **2** = fail-open risk (stop and fix before relying on it).
 - **Don't edit the user's `~/.reflexes/reflexes.yaml` or policies without their explicit OK.**
 - **Keep Reflexes current.** An automatic check runs on some hosts, but it doesn't cover all of them, so **also run `--check-update` yourself at least daily** (cheap and cached). When an update is available, tell the user and apply on their go-ahead — never auto-apply (see [Updating](#updating)).
 
@@ -93,9 +94,10 @@ reflexes:                # WHAT is enforced — named groups of bindings
 
 evaluators:              # WHO scores content against the policies
   default:
-    type: zentropi
-    model: cope-latest
-    api_key_env: ZENTROPI_API_KEY
+    type: systemone                 # evaluates ALL policies at a decision point in ONE call
+    model: parasail-cope-b-s1       # Zentropi CoPE, served via Parasail
+    endpoint: https://api.parasail.io/v1/systemone
+    api_key_env: PARASAIL_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
 enabled: true            # global on/off; false disables ALL enforcement. Absent = enabled.
@@ -267,13 +269,37 @@ version / default branch.
 
 ## Swap the evaluator
 
-The evaluator scores content against a policy. Default is Zentropi's CoPE model, which is specialized for content policy evaluation tasks. You can customize the evaluator model you want to use by replacing the `evaluators.default` block in `~/.reflexes/reflexes.yaml` with one:
+The evaluator scores content against a policy. The zero-config default — what
+runs when `reflexes.yaml` has no `evaluators:` block — is **Zentropi's CoPE
+model `cope-b-s1`, served over Parasail's System One endpoint**. CoPE is a small
+model purpose-built for content-policy evaluation; serving it via Parasail gives
+a functional, live endpoint out of the box. Set `PARASAIL_API_KEY` and policies
+fire with no further config. You can customize the evaluator by adding an
+`evaluators.default` block to `~/.reflexes/reflexes.yaml`:
 
 ```yaml
 evaluators:
   default:
-    type: zentropi
-    model: cope-latest
+    type: systemone                 # evaluates ALL policies at a decision point in ONE call
+    model: parasail-cope-b-s1       # the zero-config default (set PARASAIL_API_KEY)
+    endpoint: https://api.parasail.io/v1/systemone
+    api_key_env: PARASAIL_API_KEY
+    # Or point at another System One backend — the spec is identical:
+    #   model: jev-latest / endpoint: https://openrouter.ai/api/v1/systemone / api_key_env: OPENROUTER_API_KEY
+    #   model: cope-b-s1  / endpoint: http://localhost:8000/v1/systemone (local self-deployment, omit api_key_env)
+```
+
+A System One model (Zentropi's `cope-b-s1`, TypeSafe's `jev-latest`, or a
+self-hosted one) reads the content once and returns a calibrated decision for
+every bound policy in a single forward pass — so a decision point with several
+policies is one request, not one per policy. Swap backends with `model` +
+`endpoint`; the spec is identical.
+
+```yaml
+evaluators:
+  default:
+    type: zentropi                  # Zentropi hosted API, single-label (/v1/label)
+    model: cope-b-s1
     api_key_env: ZENTROPI_API_KEY   # required — free key: https://zentropi.ai
 ```
 

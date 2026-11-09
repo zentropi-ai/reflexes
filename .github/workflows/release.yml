@@ -31,3 +31,45 @@ jobs:
             dist/reflexes-skill-*.tar.gz
             dist/latest.json
 
+  # Publish the Python package to PyPI via OIDC Trusted Publishing (no API token
+  # stored). One-time setup: on PyPI, add a trusted publisher for project
+  # `reflexes` → owner `zentropi-ai`, repo `reflexes`, workflow `release.yml`.
+  pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # mint the OIDC token PyPI verifies
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel
+        run: |
+          pip install build
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Publish the OpenClaw plugin to npm. One-time setup: add an `NPM_TOKEN` repo
+  # secret (an npm automation token with publish rights to the @zentropi scope).
+  # The package sets publishConfig.access=public for the scoped package.
+  npm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations-ts/openclaw
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Install + build + test
+        run: |
+          npm ci
+          npm test
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+

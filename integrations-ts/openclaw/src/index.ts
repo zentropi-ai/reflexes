@@ -3,9 +3,10 @@
  *
  * Registers a `before_tool_call` hook that evaluates each tool call
  * against plain-English Reflexes policies via a policy-steerable
- * evaluator. Supports all four backends of the Python reference —
- * `zentropi` (CoPE, default and safety-tuned), `openai`, `anthropic`,
- * and `gemini` — selected by `evaluators.default.type` in reflexes.yaml.
+ * evaluator. Supports the Python reference's backends — `zentropi` (CoPE,
+ * default and safety-tuned), `systemone` (a System One decision model;
+ * evaluates all of a decision point's policies in one call), `openai`,
+ * `anthropic`, and `gemini` — selected by `evaluators.default.type`.
  *
  * Deny semantics (verified against openclaw 2026.6.11 source,
  * tools-invoke-shared): a `{block: true, blockReason}` result surfaces
@@ -241,6 +242,9 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
       openai: { apiBase: "https://api.openai.com/v1/chat/completions", keyEnv: "OPENAI_API_KEY" },
       anthropic: { apiBase: "https://api.anthropic.com/v1/messages", keyEnv: "ANTHROPIC_API_KEY" },
       gemini: { apiBase: "https://generativelanguage.googleapis.com/v1beta/models", keyEnv: "GEMINI_API_KEY" },
+      // System One decision models (multi-label, one call). apiBase is the
+      // full /v1/systemone endpoint; default is jev-latest on OpenRouter.
+      systemone: { apiBase: "https://openrouter.ai/api/v1/systemone", keyEnv: "OPENROUTER_API_KEY" },
     };
     const d = EVAL_DEFAULTS[evalType] ?? EVAL_DEFAULTS.zentropi;
     return {
@@ -903,6 +907,7 @@ export async function evaluate(
   if (type === "openai") return evaluateOpenAICompatible(config, criteria, content, opts);
   if (type === "anthropic") return evaluateAnthropic(config, criteria, content, opts);
   if (type === "gemini") return evaluateGemini(config, criteria, content, opts);
+  if (type === "systemone") return evaluateSystemOne(config, criteria, content, opts);
   return evaluateZentropi(config, criteria, content, opts); // zentropi / cope / default
 }
 
@@ -960,6 +965,167 @@ async function evaluateZentropi(
   // A 429 that survived every retry is sustained throttling, not a blip.
   if (lastStatus === 429) throw synthesizeUpgrade(429);
   throw new Error(`evaluator HTTP ${lastStatus ?? "unknown"}`);
+}
+
+// --- System One decision models (batch: all policies in one call) ----------
+// Mirrors reflexes/evaluators/systemone.py. A System One model reads the
+// content once and decides every policy in a single forward pass, so a decision
+// point with N policies is one request. Implemented by Zentropi cope-b-s1,
+// TypeSafe Jev, and local self-deploys — swap with model + endpoint.
+const SYSTEMONE_THRESHOLD = 0.5; // P(true) at/above which a policy matches ("1")
+const SYSTEMONE_INSTRUCTION =
+  "Does the content meet the criteria described in the following policy?\n\n";
+const SYSTEMONE_CRITERIA = {
+  true: "The content meets the policy's criteria.",
+  false: "The content does not meet the policy's criteria.",
+};
+
+function systemOneVerdict(pTrue: number): Verdict {
+  const label: "0" | "1" = pTrue >= SYSTEMONE_THRESHOLD ? "1" : "0";
+  return { label, confidence: label === "1" ? pTrue : 1 - pTrue };
+}
+
+/** Batch-evaluate many policies against one content in a single /v1/systemone
+ *  call. One Verdict per criteria, in order. Mirrors evaluateZentropi's retry +
+ *  fail-loud-as-throw contract (the caller fails open). */
+export async function evaluateManySystemOne(
+  config: ReflexesConfig,
+  criteriaList: string[],
+  content: string,
+  opts: EvaluateOptions = {},
+): Promise<Verdict[]> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const apiKey = process.env[config.evaluator.apiKeyEnv];
+  const questions: Record<string, unknown> = {};
+  criteriaList.forEach((criteria, i) => {
+    questions[`q${i}`] = {
+      type: "noul",
+      instructions: SYSTEMONE_INSTRUCTION + criteria,
+      criteria: SYSTEMONE_CRITERIA,
+    };
+  });
+  const body = JSON.stringify({
+    model: config.evaluator.model ?? "jev-latest",
+    questions,
+    state: { content },
+  });
+  let lastStatus: number | undefined;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000);
+    let res: Awaited<ReturnType<typeof doFetch>>;
+    try {
+      res = await doFetch(config.evaluator.apiBase, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt < MAX_RETRIES) {
+        await sleep(retryDelay(attempt));
+        continue;
+      }
+      throw err;
+    }
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as { answers?: Record<string, { noul?: number }> };
+      const answers = data.answers ?? {};
+      return criteriaList.map((_, i) => {
+        const noul = answers[`q${i}`]?.noul;
+        if (typeof noul !== "number") {
+          throw new Error(`System One response missing noul for q${i}`);
+        }
+        return systemOneVerdict(noul);
+      });
+    }
+    if (res.status === 403) throw synthesizeUpgrade(403);
+    lastStatus = res.status;
+    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRIES) {
+      await sleep(retryDelay(attempt));
+      continue;
+    }
+    break;
+  }
+  if (lastStatus === 429) throw synthesizeUpgrade(429);
+  throw new Error(`systemone evaluator HTTP ${lastStatus ?? "unknown"}`);
+}
+
+async function evaluateSystemOne(
+  config: ReflexesConfig,
+  criteria: string,
+  content: string,
+  opts: EvaluateOptions = {},
+): Promise<Verdict> {
+  return (await evaluateManySystemOne(config, [criteria], content, opts))[0];
+}
+
+/** Evaluate every binding against one content, returning one (Verdict | null)
+ *  per binding in order (null = fail-open: policy unresolved or evaluator
+ *  error). With a System One evaluator this is a SINGLE batched call; otherwise
+ *  concurrent per-policy evaluate() calls — the shape the hooks used inline. */
+async function evaluateBindings(
+  config: ReflexesConfig,
+  bindings: ReflexBinding[],
+  content: string,
+  opts: EvaluateOptions,
+): Promise<(Verdict | null)[]> {
+  const handleEvalError = (err: unknown): void => {
+    if (err instanceof UpgradeRequired) {
+      rememberUpgradeNotice(opts.sessionKey, err.userNotice);
+      opts.onFailOpenUpgrade?.(err);
+    }
+    rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
+  };
+  // Resolve each binding's criteria up front; a policy that can't be resolved
+  // fails open (null) and is excluded from the batch.
+  const criteria = await Promise.all(
+    bindings.map(async (binding) => {
+      try {
+        return await resolveBindingCriteria(binding, opts.fetchImpl);
+      } catch (err) {
+        rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
+        return null;
+      }
+    }),
+  );
+
+  if ((config.evaluator.type ?? "zentropi").toLowerCase() === "systemone") {
+    const out: (Verdict | null)[] = bindings.map(() => null);
+    const live = criteria.map((c, i) => (c !== null ? i : -1)).filter((i) => i >= 0);
+    if (live.length === 0) return out;
+    try {
+      const verdicts = await evaluateManySystemOne(
+        config,
+        live.map((i) => criteria[i] as string),
+        content,
+        opts,
+      );
+      live.forEach((bindingIdx, k) => {
+        out[bindingIdx] = verdicts[k] ?? null;
+      });
+    } catch (err) {
+      handleEvalError(err); // whole batch fails open (all null)
+    }
+    return out;
+  }
+
+  // Non-System-One: concurrent per-policy evaluate (prior behavior).
+  return mapWithConcurrency(bindings, maxConcurrent(), async (binding, i) => {
+    const c = criteria[i];
+    if (c === null) return null;
+    try {
+      return await evaluate(config, c, content, opts);
+    } catch (err) {
+      handleEvalError(err);
+      return null;
+    }
+  });
 }
 
 // --- LLM-as-judge evaluators (openai / anthropic / gemini) -----------------
@@ -1213,37 +1379,7 @@ export async function checkToolCall(
   rxdebug(`before_tool_call: evaluating ${event.toolName} (${content.length} chars assembled): ${_truncForLog(toolCallContent(event))}`);
   // Evaluate all bound policies in parallel (cap: REFLEXES_MAX_CONCURRENT,
   // default 10), then apply results in binding order — first deny wins.
-  const verdicts = await mapWithConcurrency(
-    bindings,
-    maxConcurrent(),
-    async (binding): Promise<Verdict | null> => {
-      let criteria: string;
-      try {
-        criteria = await resolveBindingCriteria(binding, opts.fetchImpl);
-      } catch (err) {
-        // Policy unavailable (missing/unreachable hosted policy) → fail-open,
-        // skip this binding. policy_cache already falls back to a stale copy on
-        // a transient refetch failure, so this only fires on a cold miss.
-        rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
-        return null;
-      }
-      try {
-        return await evaluate(config, criteria, content, opts);
-      } catch (err) {
-        // Fail-open (SPEC §4): never break the agent on evaluator failure.
-        if (err instanceof UpgradeRequired) {
-          // Two independent audiences: the user (reply_payload_sending footer,
-          // needs an outbound channel) and the agent (next-turn injection,
-          // always) — so the model learns enforcement was degraded even with no
-          // channel.
-          rememberUpgradeNotice(opts.sessionKey, err.userNotice);
-          opts.onFailOpenUpgrade?.(err);
-        }
-        rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
-        return null;
-      }
-    },
-  );
+  const verdicts = await evaluateBindings(config, bindings, content, opts);
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i];
     const verdict = verdicts[i];
@@ -1295,32 +1431,7 @@ export async function checkResponse(
   // Log the raw response (the evaluated payload), not the context-prefixed
   // assembled string, so it isn't truncated away by long task context.
   rxdebug(`before_response: evaluating response (${content.length} chars assembled): ${_truncForLog(response)}`);
-  const verdicts = await mapWithConcurrency(
-    bindings,
-    maxConcurrent(),
-    async (binding): Promise<Verdict | null> => {
-      let criteria: string;
-      try {
-        criteria = await resolveBindingCriteria(binding, opts.fetchImpl);
-      } catch (err) {
-        // Policy unavailable (missing/unreachable hosted policy) → fail-open,
-        // skip this binding. policy_cache already falls back to a stale copy on
-        // a transient refetch failure, so this only fires on a cold miss.
-        rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
-        return null;
-      }
-      try {
-        return await evaluate(config, criteria, content, opts);
-      } catch (err) {
-        if (err instanceof UpgradeRequired) {
-          rememberUpgradeNotice(opts.sessionKey, err.userNotice);
-          opts.onFailOpenUpgrade?.(err);
-        }
-        rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
-        return null;
-      }
-    },
-  );
+  const verdicts = await evaluateBindings(config, bindings, content, opts);
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i];
     const verdict = verdicts[i];
@@ -1369,29 +1480,7 @@ export async function checkInput(
     if (!content.trim()) return { outcome: "pass" };
     rxdebug(`on_input: evaluating prompt (${content.length} chars): ${_truncForLog(content)}`);
     // on_input: the content IS the request — no extra task context to assemble.
-    const verdicts = await mapWithConcurrency(
-      bindings,
-      maxConcurrent(),
-      async (binding): Promise<Verdict | null> => {
-        let criteria: string;
-        try {
-          criteria = await resolveBindingCriteria(binding, opts.fetchImpl);
-        } catch (err) {
-          rxwarn(`[reflexes] policy "${binding.name}" unavailable, skipping (fail-open): ${String(err)}`);
-          return null;
-        }
-        try {
-          return await evaluate(config, criteria, content, opts);
-        } catch (err) {
-          if (err instanceof UpgradeRequired) {
-            rememberUpgradeNotice(opts.sessionKey, err.userNotice);
-            opts.onFailOpenUpgrade?.(err);
-          }
-          rxwarn(`[reflexes] evaluator error (fail-open): ${String(err)}`);
-          return null;
-        }
-      },
-    );
+    const verdicts = await evaluateBindings(config, bindings, content, opts);
     for (let i = 0; i < bindings.length; i++) {
       const binding = bindings[i];
       const verdict = verdicts[i];

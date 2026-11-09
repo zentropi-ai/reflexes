@@ -145,6 +145,28 @@ on evaluator outage will not be adopted. Failing open at the evaluator
 boundary preserves the agent's availability while making the failure
 visible in logs.
 
+### 4.4 Batch evaluation (optional)
+
+An evaluator MAY additionally support evaluating **several policies against
+one content in a single call**. This is the natural shape of *decision
+models* implementing the [System One](https://docs.typesafe.ai/concepts/system-one)
+spec (e.g. Zentropi CoPE-B-S1, TypeSafe Jev): the content is read once and
+every policy is decided in one forward pass, so a decision point with *N*
+bound policies costs one request instead of *N*.
+
+A batch-capable evaluator accepts a list of policy criteria plus one content,
+and returns one verdict (§4.2) per policy, **in the same order**. Each verdict
+MUST be identical in meaning to what single evaluation (§4.1) of that policy
+against that content would produce. The failure contract of §4.3 applies to
+the batch: on an evaluator error the runtime MUST fail open for every policy
+in the batch, never fabricate `label=0`.
+
+Batch support is OPTIONAL and a pure optimization: a runtime MUST produce the
+same decisions whether an evaluator batches or is called once per policy. A
+runtime SHOULD evaluate all policies bound to a single decision point as one
+batch when the evaluator supports it, and MUST fall back to per-policy
+evaluation (§4.1) otherwise.
+
 ## 5. Trigger Taxonomy
 
 A Reflexes-compatible runtime MUST support these four triggers:

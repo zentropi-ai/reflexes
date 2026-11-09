@@ -65,13 +65,14 @@ def test_before_response_self_correct_and_labeled_context(tmp_path, monkeypatch)
     import reflexes.integrations.pydantic_ai as p
 
     seen = []
-    _orig = p.safe_acheck
+    import reflexes.core as _core
+    _orig = _core.safe_acheck
 
     async def _rec(**kw):
         seen.append(kw.get("context"))
         return await _orig(**kw)
 
-    monkeypatch.setattr(p, "safe_acheck", _rec)
+    monkeypatch.setattr(_core, "safe_acheck", _rec)
 
     from pydantic_ai import Agent
     agent = Agent("openai:gpt-4o-mini", system_prompt="You are a product manager.", retries=2)

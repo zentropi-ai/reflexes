@@ -28,7 +28,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from reflexes.core import safe_check, ReflexDenied, build_feedback, EvaluatorError
+from reflexes.core import safe_check, safe_check_many, ReflexDenied, build_feedback, EvaluatorError
 from reflexes.config import load_config, ReflexBinding, configure_from_file
 
 MAX_CONCURRENT = 10
@@ -36,24 +36,16 @@ MAX_CONCURRENT = 10
 
 def _evaluate_parallel_sync(bindings, content, context=None, check_type="Content"):
     """Evaluate all bindings in parallel using threads. Returns list of (binding, verdict) for matches."""
-    def _eval_one(binding):
-        verdict = safe_check(
-            policy=binding.policy.criteria, policy_name=binding.policy.name,
-            content=content, context=context, check_type=check_type,
-        )
-        return binding, verdict
-
+    # One System One call for all bindings when supported; else threaded singles.
+    specs = [(b.policy.criteria, b.policy.name) for b in bindings]
     matches = []
-    with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT, len(bindings))) as pool:
-        futures = {pool.submit(_eval_one, b): b for b in bindings}
-        for future in as_completed(futures):
-            binding, verdict = future.result()
-            if isinstance(verdict, EvaluatorError):
-                logging.getLogger("reflexes.crewai").warning(
-                    "Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
-                continue
-            if verdict.label == 1:
-                matches.append((binding, verdict))
+    for binding, verdict in zip(bindings, safe_check_many(specs, content, context=context, check_type=check_type)):
+        if isinstance(verdict, EvaluatorError):
+            logging.getLogger("reflexes.crewai").warning(
+                "Evaluator failed for '%s', skipping: %s", verdict.policy_name, verdict.error[:80])
+            continue
+        if verdict.label == 1:
+            matches.append((binding, verdict))
     return matches
 
 logger = logging.getLogger("reflexes.crewai")

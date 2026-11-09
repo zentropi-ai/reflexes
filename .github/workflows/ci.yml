@@ -28,6 +28,25 @@ jobs:
       - name: Run tests
         run: pytest tests/ -q
 
+  # Registration-shape tests for SDK integrations that need the SDK importable
+  # (OpenAI Agents SDK, Claude Agent SDK). Hermetic: no model keys, no network —
+  # they assert our guardrails/hooks attach to the SDK's real registration slots.
+  # Isolated from the main matrix (single modern Python) so an SDK packaging
+  # issue can't break the core suite. google_adk's wiring test needs no SDK and
+  # already runs in the matrix above; LangGraph's needs langchain and runs
+  # wherever that's installed.
+  sdk-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (editable + dev + light agent SDKs)
+        run: pip install -e ".[dev,otel]" openai-agents claude-agent-sdk
+      - name: Run registration-shape tests
+        run: pytest tests/test_registration_wiring.py -q
+
   typescript:
     runs-on: ubuntu-latest
     defaults:

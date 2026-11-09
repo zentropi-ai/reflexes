@@ -66,7 +66,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from reflexes.core import safe_acheck, EvaluatorError
+from reflexes.core import safe_acheck, safe_acheck_many, EvaluatorError
 from reflexes.config import load_config, ReflexBinding, configure_from_file
 from reflexes._context import assemble_task_context
 
@@ -271,14 +271,11 @@ async def _check_bindings(
     one-turn-late nature explicitly. Flag/log fire fully.
     """
     findings: list[dict] = []
-    for binding in bindings:
-        verdict = await safe_acheck(
-            policy=binding.policy.criteria,
-            content=content,
-            policy_name=binding.policy.name,
-            context=context,
-            check_type=check_type,
-        )
+    # One System One call for all bindings at this decision point when the
+    # evaluator supports it; otherwise concurrent single calls.
+    _specs = [(b.policy.criteria, b.policy.name) for b in bindings]
+    _verdicts = await safe_acheck_many(_specs, content, context=context, check_type=check_type)
+    for binding, verdict in zip(bindings, _verdicts):
         if isinstance(verdict, EvaluatorError):
             logger.warning(
                 "evaluator failed for %s: %s",

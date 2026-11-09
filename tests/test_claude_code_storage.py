@@ -54,7 +54,7 @@ def test_context_file_path_refuses_default_fallback(isolated_cache):
     assert cc._context_file_for_session("abc123") is not None
 
 
-def test_upgrade_error_surfaces_to_agent_per_turn_and_user_per_session(isolated_cache):
+def test_upgrade_error_surfaces_to_agent_per_turn_and_user_per_session(isolated_cache, monkeypatch):
     """A tier/capability evaluator failure (ReflexesUpgradeRequired) surfaces to
     the agent via additionalContext (once per TURN — useful recurring context)
     and to the user via systemMessage (once per SESSION — a banner every turn
@@ -83,6 +83,11 @@ def test_upgrade_error_surfaces_to_agent_per_turn_and_user_per_session(isolated_
 
     async def stub_safe_acheck(**kwargs):
         return EvaluatorError(policy_name="Sycophancy", error=str(upgrade), upgrade=upgrade)
+
+    # The integration now evaluates via safe_acheck_many, whose fallback path
+    # calls core.safe_acheck — patch there so the stub is reached.
+    import reflexes.core as _core
+    monkeypatch.setattr(_core, "safe_acheck", stub_safe_acheck)
 
     args = SimpleNamespace(config="/dev/null")
     hook_input = {

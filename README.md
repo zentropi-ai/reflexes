@@ -73,8 +73,9 @@ existing config — then verifies with `reflexes doctor`. It's idempotent, so yo
 can re-run it any time.
 
 Prerequisites: Python 3.10+, [`uv`](https://docs.astral.sh/uv/), and — for the
-default CoPE evaluator — a free `ZENTROPI_API_KEY` from
-[zentropi.ai](https://zentropi.ai).
+default CoPE evaluator (served via Parasail's System One endpoint) — a
+`PARASAIL_API_KEY` from [parasail.io](https://parasail.io). (You can swap in any
+other evaluator — see [Evaluators](#evaluators).)
 
 **Building an agent in code** with a Python framework (OpenAI Agents SDK,
 LangGraph, Google ADK, …) rather than a host CLI? `pip install reflexes` and wire
@@ -164,9 +165,10 @@ reflexes:
 
 evaluators:
   default:
-    type: zentropi
-    model: cope-latest
-    api_key_env: ZENTROPI_API_KEY
+    type: systemone                 # evaluates ALL policies at a decision point in ONE call
+    model: parasail-cope-b-s1       # Zentropi CoPE, served via Parasail
+    endpoint: https://api.parasail.io/v1/systemone
+    api_key_env: PARASAIL_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
 enabled: true      # global on/off; false disables ALL enforcement. Absent = enabled.
@@ -285,23 +287,28 @@ limits.
 
 ## Evaluators
 
-The default evaluator model is **[Zentropi CoPE](https://huggingface.co/zentropi-ai/cope-b-a4b)** (sub-second latency with generous free tier) —
-[purpose-built for policy-steerable classification](https://arxiv.org/abs/2512.18027). It requires a free API
-key: create an account at https://zentropi.ai, mint a key, and set
-`ZENTROPI_API_KEY` in the environment your agent runs in.
+The default evaluator model is **[Zentropi CoPE](https://huggingface.co/zentropi-ai/cope-b-a4b)** (`cope-b-s1`, sub-second latency) —
+[purpose-built for policy-steerable classification](https://arxiv.org/abs/2512.18027). Out of the box it's served
+over **[Parasail](https://parasail.io)'s System One endpoint**, so a single call
+evaluates every policy at a decision point in one forward pass. Set a
+`PARASAIL_API_KEY` in the environment your agent runs in and policies fire with
+no further config.
 
-- **Free tier** — a free key covers the starter policies, your own custom
-  policies, and everyday use.
-- **Subscriber tier** — high-volume usage and higher rate limits.
+**Privacy:** send only what your policies need to evaluate; review your
+evaluator provider's retention terms for the endpoint you point at.
 
-**Privacy:** the Zentropi API retains zero content by default — the policy
-and content you send for evaluation are not stored.
-
-Prefer not to use Zentropi? Point Reflexes at any OpenAI-compatible model
-instead (see below) — no Zentropi key required.
+Prefer a different backend? Point Reflexes at any of the evaluators below — no
+Parasail key required.
 
 Other evaluators are supported out of the box:
 
+- `type: systemone` — a **System One decision model** (Zentropi `cope-b-s1` via
+  Parasail/OpenRouter, TypeSafe `jev-latest`, or a local one). This is the
+  default. Evaluates **every policy at a decision point in one call** — one
+  forward pass, not one request per policy. Swap backends with `model` +
+  `endpoint`; the spec is identical.
+- `type: zentropi` — Zentropi's hosted single-label API (`/v1/label`); requires
+  a `ZENTROPI_API_KEY` from [zentropi.ai](https://zentropi.ai).
 - `type: openai` — any OpenAI-compatible endpoint (GPT-4o-mini, Groq, etc.)
 - `type: anthropic` — Claude as evaluator
 - `type: gemini` — Gemini as evaluator
@@ -350,7 +357,7 @@ evaluators:
   default:
     type: openai
     endpoint: http://localhost:8000/v1/chat/completions
-    model: cope-latest
+    model: cope-b-s1
 ```
 
 **Roadmap (not yet shipped):** Ollama and llama.cpp builds. Until

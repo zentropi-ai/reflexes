@@ -5,6 +5,52 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-07
+
+### Added
+- **System One evaluator (`type: systemone`).** Speaks the System One decision
+  spec (`/v1/systemone`); one contract serves Zentropi `cope-b-s1`, TypeSafe
+  `jev-latest`, and local self-deployments — swap with `model` + `endpoint`.
+- **Multi-label batching.** Every policy bound to a decision point is evaluated
+  in a single System One call (one forward pass) instead of one request per
+  policy. Falls back to concurrent single calls for non–System One evaluators.
+  Wired into every integration: Claude Code, OpenAI Codex, LangGraph, Google
+  ADK, OpenAI Agents SDK, Claude Agent SDK, AutoGen, CrewAI, NeMo Guardrails,
+  Hermes (+ shell), Pydantic AI, smolagents, and the OpenClaw TypeScript plugin.
+
+### Changed
+- **Zero-config default evaluator is now CoPE (`cope-b-s1`) over Parasail's
+  System One endpoint** (`type: systemone`, `https://api.parasail.io/v1/systemone`,
+  key from `PARASAIL_API_KEY`). When `reflexes.yaml` has no `evaluators:` block,
+  this is what runs — a live, functional endpoint out of the box that also
+  batches every policy at a decision point into one call. Previously the default
+  was the Zentropi hosted single-label API; that remains available as
+  `type: zentropi`.
+- Default CoPE model pinned to **`cope-b-s1`** (was `cope-latest`, which still
+  resolves to `cope-b-a4b` server-side).
+- The Zentropi evaluator now **requires an API key** — the hosted API has no
+  keyless tier. Missing key fails open fast with an actionable message; use
+  `type: systemone`/`type: openai` with a local endpoint for self-hosting.
+- `reflexes doctor` now WARNs (not FAILs) when the **zero-config default** is
+  missing its `PARASAIL_API_KEY` (install isn't broken, just not enforcing yet);
+  an explicitly chosen evaluator missing its key remains a FAIL.
+
+### Upgrading from 0.1.x
+- **Set `PARASAIL_API_KEY`** (free key at https://parasail.io) so the new default
+  evaluator can authenticate — otherwise enforcement fails open (policies don't
+  fire) and `reflexes doctor` reports it.
+- **If you relied on the Zentropi hosted default** (or any keyless behavior),
+  pin it explicitly and provide a key:
+  ```yaml
+  evaluators:
+    default:
+      type: zentropi
+      model: cope-b-s1
+      api_key_env: ZENTROPI_API_KEY
+  ```
+- No policy, binding, or trigger changes are required; this release is additive
+  apart from the default-evaluator switch above.
+
 ## [0.1.1]
 
 First tagged release. Ships the release/update channel and a set of
@@ -95,5 +141,6 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.2.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.2.0
 [0.1.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.0

@@ -44,6 +44,24 @@ _evaluator: Evaluator | None = None
 # instead of a generic "failed to configure". None means "no failure recorded".
 _evaluator_error: str | None = None
 
+# Zero-config default evaluator. When a reflexes.yaml has no `evaluators:` block
+# (or configure() was never called), this is what runs: Zentropi's CoPE model
+# cope-b-s1, served over Parasail's System One endpoint. Parasail is picked as
+# the out-of-the-box default because it's a live, functional endpoint today —
+# set PARASAIL_API_KEY and policies fire with no further config. Absent the key,
+# configure() fails open like any missing-key default (policies simply don't
+# fire yet; the host keeps running). Swap to any evaluator via reflexes.yaml.
+DEFAULT_EVALUATOR = "systemone"
+DEFAULT_MODEL = "parasail-cope-b-s1"
+DEFAULT_ENDPOINT = "https://api.parasail.io/v1/systemone"
+DEFAULT_API_KEY_ENV = "PARASAIL_API_KEY"
+
+# True when the currently-configured evaluator is the zero-config default above
+# (not an explicit user choice). The doctor reads this to decide WARN vs FAIL on
+# a missing key: a missing key for the *default* is a soft "not enforcing yet,"
+# while a missing key for an *explicitly chosen* evaluator is a config error.
+_default_evaluator_active: bool = False
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -235,26 +253,34 @@ def configure(
     on evaluator-config failure won't be adopted.
 
     Args:
-        evaluator: Evaluator type — "zentropi", "openai", "anthropic", or "gemini".
+        evaluator: Evaluator type — "zentropi", "systemone", "openai",
+            "anthropic", or "gemini".
         api_key: API key for the evaluator.
         endpoint: Custom endpoint URL.
-        model: Model name/ID. For zentropi: "cope-latest" (default), "cope-b-12b".
+        model: Model name/ID. zentropi: "cope-b-s1" (default). systemone:
+            "cope-b-s1" (default, via OpenRouter) / "jev-latest" / a local model.
     """
-    global _evaluator, _evaluator_error
+    global _evaluator, _evaluator_error, _default_evaluator_active
     _evaluator_error = None
+    # An explicit configure() call is, by definition, not the zero-config
+    # default. _configure_default() flips this back on after delegating here.
+    _default_evaluator_active = False
 
-    if evaluator not in ("zentropi", "openai", "anthropic", "gemini"):
+    if evaluator not in ("zentropi", "systemone", "openai", "anthropic", "gemini"):
         # Unknown type is a config error, not a runtime / auth issue —
         # surface loud so users can fix their reflexes.yaml.
         raise ValueError(
             f"Unknown evaluator: {evaluator}. "
-            f"Use 'zentropi', 'openai', 'anthropic', or 'gemini'."
+            f"Use 'zentropi', 'systemone', 'openai', 'anthropic', or 'gemini'."
         )
 
     try:
         if evaluator == "zentropi":
             from reflexes.evaluators.zentropi import ZentropiEvaluator
             _evaluator = ZentropiEvaluator(api_key=api_key, endpoint=endpoint, model=model)
+        elif evaluator == "systemone":
+            from reflexes.evaluators.systemone import SystemOneEvaluator
+            _evaluator = SystemOneEvaluator(api_key=api_key, endpoint=endpoint, model=model)
         elif evaluator == "openai":
             from reflexes.evaluators.openai_compatible import OpenAICompatibleEvaluator
             _evaluator = OpenAICompatibleEvaluator(
@@ -292,28 +318,37 @@ def configure(
         _evaluator_error = f"{evaluator} evaluator: {e}"
 
 
+def _configure_default() -> None:
+    """Configure the zero-config default evaluator — Zentropi CoPE (cope-b-s1)
+    over Parasail's System One endpoint. Pulls the key from ``PARASAIL_API_KEY``;
+    if it's unset, ``configure()`` fails open (``_evaluator`` left None, host
+    keeps running) exactly as any other missing-key default would.
+
+    Marks ``_default_evaluator_active`` so the doctor can tell this apart from an
+    explicitly chosen evaluator when deciding WARN vs FAIL on a missing key.
+    """
+    global _default_evaluator_active
+    configure(
+        evaluator=DEFAULT_EVALUATOR,
+        api_key=os.environ.get(DEFAULT_API_KEY_ENV),
+        endpoint=DEFAULT_ENDPOINT,
+        model=DEFAULT_MODEL,
+    )
+    _default_evaluator_active = True
+
+
 def _get_evaluator() -> Evaluator | None:
     """Return the configured evaluator, or None if configure() couldn't
     instantiate one. Callers MUST handle None and treat it as evaluator-
     unavailable (return EvaluatorError, fail open per SPEC §4.3).
 
-    On first call without prior ``configure()``, attempts a default
-    Zentropi instantiation; if that fails the function returns None
-    rather than raising.
+    On first call without prior ``configure()``, attempts the zero-config
+    default (CoPE via Parasail — see ``_configure_default``); if that fails
+    (e.g. missing ``PARASAIL_API_KEY``) the function returns None rather than
+    raising.
     """
-    global _evaluator
     if _evaluator is None:
-        try:
-            from reflexes.evaluators.zentropi import ZentropiEvaluator
-            _evaluator = ZentropiEvaluator()
-        except Exception as e:
-            _logger_module = logging.getLogger("reflexes.core")
-            _logger_module.warning(
-                "No evaluator configured and default Zentropi instantiation "
-                "failed (%s); evaluation will fail open.",
-                e,
-            )
-            return None
+        _configure_default()
     return _evaluator
 
 
@@ -481,6 +516,97 @@ async def safe_acheck(
             return EvaluatorError(policy_name=policy_name, error=str(e))
 
 
+async def safe_acheck_many(
+    policies: list[tuple],
+    content: str,
+    *,
+    context: str | None = None,
+    check_type: str = "Content",
+    context_label: str = "User request",
+    host: str | None = None,
+    trigger: str | None = None,
+) -> list[Verdict | EvaluatorError]:
+    """Evaluate many policies against ONE content, returning results in order.
+
+    ``policies`` is a list of ``(criteria, name)`` or ``(criteria, name, slug)``.
+    All policies share the same content/context (the common case: every binding
+    at one decision point).
+
+    If the configured evaluator supports batch evaluation (System One models),
+    this is a SINGLE call for all policies — the whole point of a System One
+    model. Otherwise it falls back to concurrent ``safe_acheck`` calls, capped
+    at ``max_concurrent()`` exactly as the per-policy path was.
+
+    Never raises on a transient/infra failure — each policy fails open with an
+    ``EvaluatorError`` (same contract as ``safe_acheck``). An ``auth_required``
+    envelope still fails CLOSED (re-raises), preserving the security contract.
+    """
+    specs = [(p[0], p[1], p[2] if len(p) > 2 else None) for p in policies]
+    if not specs:
+        return []
+
+    evaluator = _get_evaluator()
+    batch_fn = getattr(evaluator, "evaluate_batch", None) if evaluator is not None else None
+
+    # Fallback: no batch-capable evaluator, or a single policy (nothing to
+    # bundle). Concurrent single calls, capped like the old per-binding path.
+    if batch_fn is None or len(specs) == 1:
+        sem = asyncio.Semaphore(max_concurrent())
+
+        async def _one(criteria, name, slug):
+            async with sem:
+                return await safe_acheck(
+                    policy=criteria, content=content, policy_name=name,
+                    context=context, check_type=check_type,
+                    context_label=context_label, host=host, trigger=trigger,
+                    policy_slug=slug,
+                )
+
+        return list(await asyncio.gather(*[_one(c, n, s) for (c, n, s) in specs]))
+
+    # Batch path — one evaluator call for all policies. Assemble content exactly
+    # as acheck does, so a batched verdict is identical to its single-call form.
+    from reflexes import observability as _obs
+    evaluator_type = evaluator.__class__.__name__
+    assembled = _assemble_content(content, context, check_type, context_label)
+    try:
+        verdicts = await batch_fn(
+            policies=[(slug or name, criteria) for (criteria, name, slug) in specs],
+            content=assembled,
+        )
+        if len(verdicts) != len(specs):
+            raise RuntimeError(
+                f"batch evaluator returned {len(verdicts)} verdicts for "
+                f"{len(specs)} policies"
+            )
+    except ReflexesUpgradeRequired as e:
+        # Same two-tier dispatch as safe_acheck: auth_required fails closed.
+        _obs.increment_verdict_counter("upgrade_required")
+        if e.error == "auth_required":
+            raise
+        return [EvaluatorError(policy_name=n, error=str(e), upgrade=e) for (_, n, _) in specs]
+    except Exception as e:
+        _logger.error("Batch evaluator failed for %d policies: %s", len(specs), e)
+        _obs.increment_verdict_counter("error")
+        return [EvaluatorError(policy_name=n, error=str(e)) for (_, n, _) in specs]
+
+    # Record per-policy verdicts (one span each, as the single path does); one
+    # latency sample for the shared batch call, not K.
+    latency_done = False
+    for (_criteria, name, _slug), verdict in zip(specs, verdicts):
+        with _obs.evaluator_span(
+            policy_name=name, evaluator_type=evaluator_type, host=host, trigger=trigger,
+        ) as _span:
+            _obs.record_verdict(
+                _span, label=verdict.label, confidence=verdict.confidence,
+                latency_ms=verdict.latency_ms,
+            )
+        if not latency_done and verdict.latency_ms is not None:
+            _obs.record_latency(evaluator_type, verdict.latency_ms)
+            latency_done = True
+    return list(verdicts)
+
+
 def safe_check(
     policy: str,
     content: str,
@@ -498,3 +624,29 @@ def safe_check(
     except Exception as e:
         _logger.error("Evaluator failed for policy '%s': %s", policy_name, e)
         return EvaluatorError(policy_name=policy_name, error=str(e))
+
+
+def safe_check_many(
+    policies: list[tuple],
+    content: str,
+    *,
+    context: str | None = None,
+    check_type: str = "Content",
+    context_label: str = "User request",
+    host: str | None = None,
+    trigger: str | None = None,
+) -> list[Verdict | EvaluatorError]:
+    """Sync wrapper for ``safe_acheck_many`` — one batched System One call for
+    all policies where the evaluator supports it, else concurrent singles. For
+    sync integrations (smolagents, crewai). See ``safe_acheck_many``."""
+    coro = safe_acheck_many(
+        policies, content, context=context, check_type=check_type,
+        context_label=context_label, host=host, trigger=trigger,
+    )
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(coro)).result()
