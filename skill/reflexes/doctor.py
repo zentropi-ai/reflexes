@@ -184,10 +184,10 @@ def _check_hosts() -> list[tuple[str, str, str]]:
                 results.append(("OpenAI Codex", _WARN,
                                 f"hooks wired in {cx} and `[features] hooks` enabled — but Codex "
                                 "also requires you to TRUST command hooks, which can't be verified "
-                                "from here. In Codex, run `/hooks`, trust the Reflexes definitions, "
-                                "restart, then confirm a known policy actually fires. (Until then, "
-                                "untrusted hooks are silently skipped — fail-open. Editing a hook "
-                                "re-requires trust.)"))
+                                "from here. Trust the Reflexes definitions (Codex CLI: run `/hooks`; "
+                                "Codex app in ChatGPT: Settings → Hooks), restart, then confirm a "
+                                "known policy actually fires. (Until then, untrusted hooks are "
+                                "silently skipped — fail-open. Editing a hook re-requires trust.)"))
     hm = home / ".hermes" / "config.yaml"
     if (home / ".hermes").exists():
         wired = hm.exists() and _wired(hm)
