@@ -46,15 +46,14 @@ _evaluator_error: str | None = None
 
 # Zero-config default evaluator. When a reflexes.yaml has no `evaluators:` block
 # (or configure() was never called), this is what runs: Zentropi's CoPE model
-# cope-b-s1, served over Parasail's System One endpoint. Parasail is picked as
-# the out-of-the-box default because it's a live, functional endpoint today —
-# set PARASAIL_API_KEY and policies fire with no further config. Absent the key,
+# cope-b-s1, served over Zentropi's hosted System One endpoint. Set
+# ZENTROPI_API_KEY and policies fire with no further config. Absent the key,
 # configure() fails open like any missing-key default (policies simply don't
 # fire yet; the host keeps running). Swap to any evaluator via reflexes.yaml.
 DEFAULT_EVALUATOR = "systemone"
-DEFAULT_MODEL = "parasail-cope-b-s1"
-DEFAULT_ENDPOINT = "https://api.parasail.io/v1/systemone"
-DEFAULT_API_KEY_ENV = "PARASAIL_API_KEY"
+DEFAULT_MODEL = "cope-b-s1"
+DEFAULT_ENDPOINT = "https://api.zentropi.ai/v1/systemone"
+DEFAULT_API_KEY_ENV = "ZENTROPI_API_KEY"
 
 # True when the currently-configured evaluator is the zero-config default above
 # (not an explicit user choice). The doctor reads this to decide WARN vs FAIL on
@@ -320,9 +319,10 @@ def configure(
 
 def _configure_default() -> None:
     """Configure the zero-config default evaluator — Zentropi CoPE (cope-b-s1)
-    over Parasail's System One endpoint. Pulls the key from ``PARASAIL_API_KEY``;
-    if it's unset, ``configure()`` fails open (``_evaluator`` left None, host
-    keeps running) exactly as any other missing-key default would.
+    over Zentropi's hosted System One endpoint. Pulls the key from
+    ``ZENTROPI_API_KEY``; if it's unset, ``configure()`` fails open
+    (``_evaluator`` left None, host keeps running) exactly as any other
+    missing-key default would.
 
     Marks ``_default_evaluator_active`` so the doctor can tell this apart from an
     explicitly chosen evaluator when deciding WARN vs FAIL on a missing key.
@@ -343,8 +343,8 @@ def _get_evaluator() -> Evaluator | None:
     unavailable (return EvaluatorError, fail open per SPEC §4.3).
 
     On first call without prior ``configure()``, attempts the zero-config
-    default (CoPE via Parasail — see ``_configure_default``); if that fails
-    (e.g. missing ``PARASAIL_API_KEY``) the function returns None rather than
+    default (CoPE on Zentropi — see ``_configure_default``); if that fails
+    (e.g. missing ``ZENTROPI_API_KEY``) the function returns None rather than
     raising.
     """
     if _evaluator is None:

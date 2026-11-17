@@ -79,7 +79,7 @@ def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
         # Surface the specific cause (e.g. "Anthropic API key required. Set
         # ANTHROPIC_API_KEY…") that configure() stashed, not just a generic line.
         reason = core._evaluator_error or "check evaluators: section + API key env"
-        # A missing key for the ZERO-CONFIG DEFAULT (CoPE via Parasail, used when
+        # A missing key for the ZERO-CONFIG DEFAULT (CoPE on Zentropi, used when
         # reflexes.yaml has no `evaluators:` block) is a clean WARN — the install
         # isn't broken, it just isn't enforcing yet: get a key or point at your
         # own evaluator. An explicitly chosen evaluator missing its key is a
@@ -88,8 +88,8 @@ def _check_evaluator(config_path: Path | None) -> tuple[str, str]:
             return (
                 _WARN,
                 f"no {core.DEFAULT_API_KEY_ENV} set — the default CoPE evaluator "
-                "(cope-b-s1 via Parasail) needs one, so policies will NOT fire yet. "
-                "Get a key at https://parasail.io and put it where this host picks "
+                "(cope-b-s1 on Zentropi) needs one, so policies will NOT fire yet. "
+                "Get a key at https://zentropi.ai and put it where this host picks "
                 "up environment variables so it's visible here (e.g. Codex reads "
                 "`~/.codex/.env`) — not in a shared config file — or swap to an "
                 "evaluator you already have a key for (see 'Swap the Evaluator'). "

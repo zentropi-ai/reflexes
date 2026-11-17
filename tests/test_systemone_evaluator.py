@@ -4,9 +4,9 @@ Covers request shaping to the System One spec, response parsing and
 thresholding of P(true), multi-label batching in one call, the 26-question
 chunk cap, keyless-local vs remote-key auth, and transient retry / hard-fail.
 
-Uses httpx.MockTransport to stub the network — no live calls. (The default
-OpenRouter /v1/systemone endpoint is not live yet; these pin the client
-contract so a one-line live check suffices once it is.)
+Uses httpx.MockTransport to stub the network — no live calls. These pin the
+client contract against the default Zentropi /v1/systemone endpoint so a
+one-line live check suffices.
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ async def test_single_request_shape_and_parse(monkeypatch):
     assert v.label == 1 and v.mode == "cope"
     assert v.confidence == pytest.approx(0.98)
     body = seen["body"]
-    assert body["model"] == "jev-latest"
+    assert body["model"] == "cope-b-s1"
     assert body["state"] == {"content": "Ships March 15."}
     q = body["questions"]["q0"]
     assert q["type"] == "noul"
@@ -146,12 +146,12 @@ async def test_hard_400_raises(monkeypatch):
 
 
 def test_remote_endpoint_requires_key(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
     with pytest.raises(ValueError, match="API key required"):
         s1.SystemOneEvaluator(api_key=None)  # default endpoint is remote
 
 
 def test_local_endpoint_keyless_ok(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
     ev = s1.SystemOneEvaluator(api_key=None, endpoint="http://localhost:8000/v1/systemone")
-    assert ev.api_key is None and ev.model == "jev-latest"
+    assert ev.api_key is None and ev.model == "cope-b-s1"

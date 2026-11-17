@@ -6,18 +6,18 @@ single forward pass. That makes multi-policy evaluation at one decision
 point a SINGLE API call instead of one call per policy.
 
 Reflexes' zero-config default backend is Zentropi's ``cope-b-s1`` served over
-Parasail (``https://api.parasail.io/v1/systemone``, key from
-``PARASAIL_API_KEY`` — see ``reflexes.core.DEFAULT_*``). The same spec is
+Zentropi's hosted endpoint (``https://api.zentropi.ai/v1/systemone``, key from
+``ZENTROPI_API_KEY`` — see ``reflexes.core.DEFAULT_*``). The same spec is
 implemented by TypeSafe's ``jev-latest`` (OpenRouter) and by a local
-self-deployment, so switching backends is just model + endpoint. (This
-evaluator's own fallback default, when ``type: systemone`` is given with no
-model/endpoint, is ``jev-latest`` on OpenRouter — see ``DEFAULT_MODEL`` below.)
+self-deployment, so switching backends is just model + endpoint. ``type:
+systemone`` with no model/endpoint falls back to this same default —
+``cope-b-s1`` on Zentropi (see ``DEFAULT_*`` below).
 
     evaluators:
       default:
         type: systemone
-        model: parasail-cope-b-s1        # or jev-latest, or cope-b-s1 on a local deploy
-        endpoint: https://api.parasail.io/v1/systemone   # or OpenRouter / a local self-deployment
+        model: cope-b-s1        # or jev-latest, or cope-b-s1 on a local deploy
+        endpoint: https://api.zentropi.ai/v1/systemone   # or OpenRouter / a local self-deployment
 
 Each Reflexes policy becomes one ``noul`` (true/false) question using the
 content-policy convention: the model returns ``P(true)`` — the probability
@@ -42,10 +42,8 @@ from reflexes.evaluators._retry import RETRYABLE_STATUS_CODES, MAX_ATTEMPTS, bac
 
 logger = logging.getLogger("reflexes.evaluators.systemone")
 
-DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/systemone"
-# jev-latest for now — Zentropi's cope-b-s1 (same spec) becomes the default here
-# once it's available on OpenRouter; that swap is this one line.
-DEFAULT_MODEL = "jev-latest"
+DEFAULT_ENDPOINT = "https://api.zentropi.ai/v1/systemone"
+DEFAULT_MODEL = "cope-b-s1"
 
 # P(true) at/above which a policy is considered matched (label=1). 0.5 keeps the
 # binary behavior of the older single-label CoPE path; raise it per use case
@@ -100,16 +98,17 @@ class SystemOneEvaluator:
         model: str | None = None,
         threshold: float = DEFAULT_THRESHOLD,
     ):
-        # Default env is OpenRouter's since that's the default endpoint; a Jev
-        # or other backend passes its own key via config (api_key / api_key_env).
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        # Default env is Zentropi's since that's the default endpoint; another
+        # backend (TypeSafe/Jev on OpenRouter, a local deploy) passes its own key
+        # via config (api_key / api_key_env).
+        self.api_key = api_key or os.environ.get("ZENTROPI_API_KEY")
         self.endpoint = endpoint or DEFAULT_ENDPOINT
         self.model = model or DEFAULT_MODEL
         self.threshold = threshold
         if not self.api_key and not _is_local_endpoint(self.endpoint):
             raise ValueError(
                 "API key required for a remote System One endpoint. Set "
-                "OPENROUTER_API_KEY (or pass api_key=/api_key_env for another "
+                "ZENTROPI_API_KEY (or pass api_key=/api_key_env for another "
                 "backend such as TypeSafe/Jev). Local self-deployments "
                 "(http://localhost:…) don't need one."
             )

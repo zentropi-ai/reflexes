@@ -73,8 +73,8 @@ existing config — then verifies with `reflexes doctor`. It's idempotent, so yo
 can re-run it any time.
 
 Prerequisites: Python 3.10+, [`uv`](https://docs.astral.sh/uv/), and — for the
-default CoPE evaluator (served via Parasail's System One endpoint) — a
-`PARASAIL_API_KEY` from [parasail.io](https://parasail.io). (You can swap in any
+default CoPE evaluator (Zentropi's hosted System One endpoint) — a
+`ZENTROPI_API_KEY` from [zentropi.ai](https://zentropi.ai). (You can swap in any
 other evaluator — see [Evaluators](#evaluators).)
 
 **Building an agent in code** with a Python framework (OpenAI Agents SDK,
@@ -166,9 +166,9 @@ reflexes:
 evaluators:
   default:
     type: systemone                 # evaluates ALL policies at a decision point in ONE call
-    model: parasail-cope-b-s1       # Zentropi CoPE, served via Parasail
-    endpoint: https://api.parasail.io/v1/systemone
-    api_key_env: PARASAIL_API_KEY
+    model: cope-b-s1                # Zentropi CoPE
+    endpoint: https://api.zentropi.ai/v1/systemone
+    api_key_env: ZENTROPI_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
 enabled: true      # global on/off; false disables ALL enforcement. Absent = enabled.
@@ -289,21 +289,20 @@ limits.
 
 The default evaluator model is **[Zentropi CoPE](https://huggingface.co/zentropi-ai/cope-b-a4b)** (`cope-b-s1`, sub-second latency) —
 [purpose-built for policy-steerable classification](https://arxiv.org/abs/2512.18027). Out of the box it's served
-over **[Parasail](https://parasail.io)'s System One endpoint**, so a single call
-evaluates every policy at a decision point in one forward pass. Set a
-`PARASAIL_API_KEY` in the environment your agent runs in and policies fire with
-no further config.
+over **Zentropi's hosted System One endpoint**, so a single call evaluates every
+policy at a decision point in one forward pass. Set a `ZENTROPI_API_KEY` from
+[zentropi.ai](https://zentropi.ai) in the environment your agent runs in and
+policies fire with no further config.
 
 **Privacy:** send only what your policies need to evaluate; review your
 evaluator provider's retention terms for the endpoint you point at.
 
-Prefer a different backend? Point Reflexes at any of the evaluators below — no
-Parasail key required.
+Prefer a different backend? Point Reflexes at any of the evaluators below.
 
 Other evaluators are supported out of the box:
 
-- `type: systemone` — a **System One decision model** (Zentropi `cope-b-s1` via
-  Parasail/OpenRouter, TypeSafe `jev-latest`, or a local one). This is the
+- `type: systemone` — a **System One decision model** (Zentropi `cope-b-s1` on
+  Zentropi, TypeSafe `jev-latest` on OpenRouter, or a local one). This is the
   default. Evaluates **every policy at a decision point in one call** — one
   forward pass, not one request per policy. Swap backends with `model` +
   `endpoint`; the spec is identical.

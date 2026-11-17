@@ -214,11 +214,21 @@ test("systemone via evaluate(): single policy → one-question request", async (
   assert.equal(v.label, "1");
 });
 
-test("loadConfig fills systemone defaults (OpenRouter + OPENROUTER_API_KEY)", () => {
+test("loadConfig fills systemone defaults (Zentropi + ZENTROPI_API_KEY)", () => {
   const dir = mkdtempSync(join(tmpdir(), "rx-s1-"));
   const p = join(dir, "reflexes.yaml");
   writeFileSync(p, "reflexes:\n  default: []\nevaluators:\n  default:\n    type: systemone\n");
   const c = loadConfig(p);
-  assert.equal(c.evaluator.apiBase, "https://openrouter.ai/api/v1/systemone");
-  assert.equal(c.evaluator.apiKeyEnv, "OPENROUTER_API_KEY");
+  assert.equal(c.evaluator.apiBase, "https://api.zentropi.ai/v1/systemone");
+  assert.equal(c.evaluator.apiKeyEnv, "ZENTROPI_API_KEY");
+});
+
+test("loadConfig default evaluator type is systemone (cope-b-s1 on Zentropi)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "rx-s1def-"));
+  const p = join(dir, "reflexes.yaml");
+  writeFileSync(p, "reflexes:\n  default: []\nevaluators:\n  default: {}\n");
+  const c = loadConfig(p);
+  assert.equal(c.evaluator.type, "systemone");
+  assert.equal(c.evaluator.apiBase, "https://api.zentropi.ai/v1/systemone");
+  assert.equal(c.evaluator.apiKeyEnv, "ZENTROPI_API_KEY");
 });

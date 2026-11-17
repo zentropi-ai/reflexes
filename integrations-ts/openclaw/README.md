@@ -44,8 +44,9 @@ reflexes:
       action: deny
 evaluators:
   default:
-    type: zentropi
-    model: cope-latest
+    type: systemone
+    model: cope-b-s1
+    endpoint: https://api.zentropi.ai/v1/systemone
     api_key_env: ZENTROPI_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
@@ -71,10 +72,11 @@ labeler (`zentropi:<labeler_id>[@<version>]`), or a GitHub-hosted file
 (`github:<owner>/<repo>/<path>@<tag-or-sha>`). Hosted policies are fetched and
 cached on first use.
 
-**Evaluator backends.** `type` can be `zentropi` (CoPE — the default and
-safety-tuned), `systemone` (a System One decision model — Zentropi `cope-b-s1`,
-TypeSafe `jev-latest`, or a local one — which evaluates **all policies at a
-decision point in one call**), `openai`, `anthropic`, or `gemini`. The LLM backends are general
+**Evaluator backends.** `type` can be `systemone` (the default — a System One
+decision model, Zentropi `cope-b-s1` served over `/v1/systemone`, which
+evaluates **all policies at a decision point in one call**; also TypeSafe
+`jev-latest` or a local one), `zentropi` (CoPE single-label `/v1/label`),
+`openai`, `anthropic`, or `gemini`. The LLM backends are general
 chat models prompted to classify, so they are looser and less calibrated than
 CoPE; for them, set `model`, `api_key_env`, and (if needed) `endpoint`.
 

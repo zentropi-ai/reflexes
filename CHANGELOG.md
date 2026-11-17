@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-17
+
+### Changed
+- **Default evaluator is now Zentropi's hosted System One endpoint.** The
+  zero-config default (and the `type: systemone` fallback) is `cope-b-s1` over
+  `https://api.zentropi.ai/v1/systemone`, authenticated with `ZENTROPI_API_KEY`.
+  This replaces the 0.2.0 interim default, which served the same `cope-b-s1`
+  model via Parasail; Zentropi now hosts `/v1/systemone` directly, so Parasail
+  is no longer part of the default path. Applies to the Python package and the
+  OpenClaw plugin (whose default evaluator moves from the single-label
+  `type: zentropi` to batched `type: systemone`).
+
+### Upgrading from 0.2.0
+- **Set `ZENTROPI_API_KEY`** (from https://zentropi.ai) instead of
+  `PARASAIL_API_KEY`; the default no longer uses Parasail.
+- To keep pointing at Parasail (or any other System One backend), set it
+  explicitly in `reflexes.yaml`:
+  ```yaml
+  evaluators:
+    default:
+      type: systemone
+      model: parasail-cope-b-s1
+      endpoint: https://api.parasail.io/v1/systemone
+      api_key_env: PARASAIL_API_KEY
+  ```
+- No policy, binding, or trigger changes are required.
+
 ## [0.2.0] - 2026-11-07
 
 ### Added
@@ -141,6 +168,7 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.3.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.0
 [0.2.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.2.0
 [0.1.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.1.0

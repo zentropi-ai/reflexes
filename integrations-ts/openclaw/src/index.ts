@@ -3,9 +3,10 @@
  *
  * Registers a `before_tool_call` hook that evaluates each tool call
  * against plain-English Reflexes policies via a policy-steerable
- * evaluator. Supports the Python reference's backends — `zentropi` (CoPE,
- * default and safety-tuned), `systemone` (a System One decision model;
- * evaluates all of a decision point's policies in one call), `openai`,
+ * evaluator. Supports the Python reference's backends — `systemone` (the
+ * default: a System One decision model, Zentropi `cope-b-s1`, that evaluates
+ * all of a decision point's policies in one call), `zentropi` (CoPE single-
+ * label `/v1/label`), `openai`,
  * `anthropic`, and `gemini` — selected by `evaluators.default.type`.
  *
  * Deny semantics (verified against openclaw 2026.6.11 source,
@@ -231,7 +232,7 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
       }
     }
     const evalCfg = (doc?.evaluators as Record<string, Record<string, string>>)?.default ?? {};
-    const evalType = (evalCfg.type ?? "zentropi").toLowerCase();
+    const evalType = (evalCfg.type ?? "systemone").toLowerCase();
     // Per-type defaults mirror the Python evaluator classes. `apiBase` is the
     // base URL for zentropi (evaluate() appends /v1/label) and the models base
     // for gemini; for openai/anthropic it is the full endpoint URL. `endpoint`
@@ -242,9 +243,10 @@ export function loadConfig(configPath?: string): ReflexesConfig | null {
       openai: { apiBase: "https://api.openai.com/v1/chat/completions", keyEnv: "OPENAI_API_KEY" },
       anthropic: { apiBase: "https://api.anthropic.com/v1/messages", keyEnv: "ANTHROPIC_API_KEY" },
       gemini: { apiBase: "https://generativelanguage.googleapis.com/v1beta/models", keyEnv: "GEMINI_API_KEY" },
-      // System One decision models (multi-label, one call). apiBase is the
-      // full /v1/systemone endpoint; default is jev-latest on OpenRouter.
-      systemone: { apiBase: "https://openrouter.ai/api/v1/systemone", keyEnv: "OPENROUTER_API_KEY" },
+      // System One decision models (multi-label, one call) — the default.
+      // apiBase is the full /v1/systemone endpoint; default is cope-b-s1 on
+      // Zentropi (swap model + endpoint for jev-latest on OpenRouter, etc.).
+      systemone: { apiBase: "https://api.zentropi.ai/v1/systemone", keyEnv: "ZENTROPI_API_KEY" },
     };
     const d = EVAL_DEFAULTS[evalType] ?? EVAL_DEFAULTS.zentropi;
     return {
@@ -903,7 +905,7 @@ export async function evaluate(
   content: string,
   opts: EvaluateOptions = {},
 ): Promise<Verdict> {
-  const type = (config.evaluator.type ?? "zentropi").toLowerCase();
+  const type = (config.evaluator.type ?? "systemone").toLowerCase();
   if (type === "openai") return evaluateOpenAICompatible(config, criteria, content, opts);
   if (type === "anthropic") return evaluateAnthropic(config, criteria, content, opts);
   if (type === "gemini") return evaluateGemini(config, criteria, content, opts);
@@ -1005,7 +1007,7 @@ export async function evaluateManySystemOne(
     };
   });
   const body = JSON.stringify({
-    model: config.evaluator.model ?? "jev-latest",
+    model: config.evaluator.model ?? "cope-b-s1",
     questions,
     state: { content },
   });
@@ -1095,7 +1097,7 @@ async function evaluateBindings(
     }),
   );
 
-  if ((config.evaluator.type ?? "zentropi").toLowerCase() === "systemone") {
+  if ((config.evaluator.type ?? "systemone").toLowerCase() === "systemone") {
     const out: (Verdict | null)[] = bindings.map(() => null);
     const live = criteria.map((c, i) => (c !== null ? i : -1)).filter((i) => i >= 0);
     if (live.length === 0) return out;

@@ -31,19 +31,19 @@ hold (verified by commands, not assumed):
 2. The host's hook config contains Reflexes entries (Step 6).
 3. `uv run <SKILL_DIR>/scripts/reflexes-doctor --config ~/.reflexes/reflexes.yaml` exits 0 (green) or 1 (warnings only). Exit 2 is a fail-open risk to fix.
 
-If the doctor exits 1 with `no PARASAIL_API_KEY set` (the default evaluator's
+If the doctor exits 1 with `no ZENTROPI_API_KEY set` (the default evaluator's
 key), the install is wired but **not enforcing** — tell the user to add a key
 (or swap the evaluator) and re-run; don't claim protection is live.
 
 ## Step 1: Prerequisites
 
-Need Python 3.10+, `uv`, and (for the default CoPE-via-Parasail evaluator) an
-API key in `PARASAIL_API_KEY`.
+Need Python 3.10+, `uv`, and (for the default CoPE evaluator on Zentropi) an
+API key in `ZENTROPI_API_KEY`.
 
 ```bash
 python3 --version   # 3.10+
 uv --version        # if missing: pip install uv
-test -n "$PARASAIL_API_KEY" && echo "key: set" || echo "key: MISSING"
+test -n "$ZENTROPI_API_KEY" && echo "key: set" || echo "key: MISSING"
 ```
 
 If the key is **MISSING**: tell the user to create a free account at
@@ -158,9 +158,9 @@ reflexes:
 evaluators:
   default:
     type: systemone                 # evaluates ALL policies at a decision point in ONE call
-    model: parasail-cope-b-s1       # Zentropi CoPE, served via Parasail
-    endpoint: https://api.parasail.io/v1/systemone
-    api_key_env: PARASAIL_API_KEY
+    model: cope-b-s1                # Zentropi CoPE
+    endpoint: https://api.zentropi.ai/v1/systemone
+    api_key_env: ZENTROPI_API_KEY
 
 # --- Operational settings (optional; safe defaults) ---
 enabled: true      # global on/off — set false to disable ALL enforcement (policies kept). Absent = enabled.
@@ -305,7 +305,7 @@ Then:
    all** (`before_agent_finalize` is blocked, so `Sycophancy` and the autonomy
    bundle silently don't run). Verified on openclaw 2026.6.11.
 2. Ensure `~/.reflexes/reflexes.yaml` + policies exist (Steps 4–5); put
-   `PARASAIL_API_KEY` (the default evaluator's key) in the gateway env; restart
+   `ZENTROPI_API_KEY` (the default evaluator's key) in the gateway env; restart
    the gateway.
 
 **Full trigger parity.** All three default integrity policies run:
@@ -336,8 +336,8 @@ enforcing; `1` = warnings (commonly no API key — wired but not enforcing);
 - **Doctor exit 0:** Reflexes is installed and enforcing on `<HOST>`.
   Restart `<HOST>` to load the hook. The 3 integrity policies are active.
 - **Doctor exit 1 (no key):** Reflexes is wired but not enforcing yet.
-  The user must add `PARASAIL_API_KEY` (the default evaluator's key, from
-  https://parasail.io) or swap the evaluator, then re-run the doctor.
+  The user must add `ZENTROPI_API_KEY` (the default evaluator's key, from
+  https://zentropi.ai) or swap the evaluator, then re-run the doctor.
 - **Codex, trust not yet granted:** the doctor can't see Codex's hook-trust
   state, so even a fully-wired Codex install is **not enforcing** until the user
   trusts the Reflexes definitions — in the Codex CLI via `/hooks`, or in the
