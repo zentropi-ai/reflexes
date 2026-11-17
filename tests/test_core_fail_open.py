@@ -36,10 +36,9 @@ def fresh_core(monkeypatch):
     leak. Reloading the module is overkill; setting _evaluator = None
     directly is enough.
     """
-    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
-    # The zero-config default is CoPE via Parasail; clear its key (and the
+    # The zero-config default is CoPE on Zentropi; clear its key (and the
     # systemone OpenRouter fallback key) so the lazy/default paths fail open.
-    monkeypatch.delenv("PARASAIL_API_KEY", raising=False)
+    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     import reflexes.core as core
     core._evaluator = None
@@ -64,7 +63,7 @@ def test_configure_zentropi_no_key_fails_open(fresh_core):
 
 
 def test_get_evaluator_lazy_default_fails_open_without_key(fresh_core):
-    """Lazy default (CoPE via Parasail) instantiation with no key returns None
+    """Lazy default (CoPE on Zentropi) instantiation with no key returns None
     (fail open), not a dead keyless client."""
     assert fresh_core._get_evaluator() is None
     assert fresh_core._evaluator is None

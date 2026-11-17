@@ -154,16 +154,16 @@ def configure_from_file(config_file: str | Path = "reflexes.yaml"):
     default evaluator (the first one listed).
 
     With no `evaluators:` block, the zero-config default is used: Zentropi CoPE
-    (cope-b-s1) over Parasail's System One endpoint (see
+    (cope-b-s1) over Zentropi's hosted System One endpoint (see
     `reflexes.core._configure_default`).
 
     Example:
         evaluators:
           cope:
             type: systemone
-            model: parasail-cope-b-s1
-            endpoint: https://api.parasail.io/v1/systemone
-            api_key_env: PARASAIL_API_KEY
+            model: cope-b-s1
+            endpoint: https://api.zentropi.ai/v1/systemone
+            api_key_env: ZENTROPI_API_KEY
 
           gpt-oss:
             type: openai
@@ -195,7 +195,7 @@ def configure_from_file(config_file: str | Path = "reflexes.yaml"):
     evaluators = raw.get("evaluators")
     if not evaluators:
         # No `evaluators:` block → the zero-config default: CoPE (cope-b-s1) via
-        # Parasail's System One endpoint. Configure it explicitly so `_evaluator`
+        # Zentropi's hosted System One endpoint. Configure it explicitly so `_evaluator`
         # is set, exactly as if the user had written the equivalent `evaluators:`
         # block. Returning here instead (the old behavior) left `_evaluator` None,
         # which a host's startup gate reads as a fail-open — a FALSE alarm, since

@@ -212,14 +212,14 @@ def test_log_action_surfaces_at_warning_not_info():
     assert not offenders, "log-action must emit at WARNING, not INFO:\n" + "\n".join(offenders)
 
 
-def test_configure_from_file_no_evaluators_block_defaults_to_cope_via_parasail(tmp_path, monkeypatch):
-    """No `evaluators:` block → the zero-config default (CoPE via Parasail) is
+def test_configure_from_file_no_evaluators_block_defaults_to_cope_on_zentropi(tmp_path, monkeypatch):
+    """No `evaluators:` block → the zero-config default (CoPE on Zentropi) is
     configured explicitly so `_evaluator` is SET (not None). Leaving it None made
     a host's startup gate report a FALSE fail-open on a supported config."""
     import reflexes.core as core
     from reflexes.config import configure_from_file
     from reflexes.evaluators.systemone import SystemOneEvaluator
-    monkeypatch.setenv("PARASAIL_API_KEY", "test-key")
+    monkeypatch.setenv("ZENTROPI_API_KEY", "test-key")
     saved = core._evaluator
     core._evaluator = None
     try:
@@ -232,7 +232,7 @@ def test_configure_from_file_no_evaluators_block_defaults_to_cope_via_parasail(t
         )
         configure_from_file(str(cfg))
         assert isinstance(core._evaluator, SystemOneEvaluator), \
-            "no evaluators block must default to CoPE-via-Parasail, not leave _evaluator None"
+            "no evaluators block must default to CoPE-on-Zentropi, not leave _evaluator None"
         assert core._evaluator.endpoint == core.DEFAULT_ENDPOINT
         assert core._evaluator.model == core.DEFAULT_MODEL
         assert core._default_evaluator_active is True

@@ -49,12 +49,12 @@ def test_find_config_prefers_explicit(tmp_path):
 
 
 def test_missing_default_key_is_warn_not_fail(tmp_path, monkeypatch):
-    """Product decision: a missing key for the ZERO-CONFIG DEFAULT (CoPE via
-    Parasail — a config with no `evaluators:` block) is a clean WARN (get a key
+    """Product decision: a missing key for the ZERO-CONFIG DEFAULT (CoPE on
+    Zentropi — a config with no `evaluators:` block) is a clean WARN (get a key
     or swap the evaluator), NOT a hard FAIL. The install shouldn't read as a
     crash — the doctor runs, warns, and exits 1, not 2."""
     from reflexes.doctor import _check_evaluator
-    monkeypatch.delenv("PARASAIL_API_KEY", raising=False)
+    monkeypatch.delenv("ZENTROPI_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     pol = tmp_path / "policies"
     pol.mkdir()
@@ -66,7 +66,7 @@ def test_missing_default_key_is_warn_not_fail(tmp_path, monkeypatch):
     )
     status, msg = _check_evaluator(cfg)
     assert status == "warn", f"expected warn, got {status!r}: {msg}"
-    assert "parasail" in msg.lower()  # tells the user how to get a key
+    assert "zentropi" in msg.lower()  # tells the user how to get a key
     assert "swap" in msg.lower()       # and the alternative
 
 
