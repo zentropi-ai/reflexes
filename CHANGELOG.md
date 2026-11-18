@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-11-18
+
+### Changed
+- **Starter policy wording tightened** for the three integrity policies
+  (Constraint-Violation, Sycophancy, Unconfirmed-Destructive-Action): the
+  Overview / Definition of Terms / Interpretation sections are condensed while
+  the Includes/Excludes rules and examples are preserved. Because the evaluator
+  reads the policy criteria directly, verdicts on borderline content may shift
+  slightly.
+- **Docs steer to the System One default.** The "Swap the evaluator" section no
+  longer advertises the single-label `type: zentropi` example; `type: systemone`
+  (Zentropi `cope-b-s1` over `/v1/systemone`) is the documented default.
+  `type: zentropi` remains supported.
+
 ## [0.3.1] - 2026-11-18
 
 ### Fixed
@@ -177,6 +191,7 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.3.2]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.2
 [0.3.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.1
 [0.3.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.0
 [0.2.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.2.0
