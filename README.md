@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: v0.1 — first public release.** Claude Code, OpenAI Codex, LangGraph,
+> **Status: v0.3.2 — first public release.** Claude Code, OpenAI Codex, LangGraph,
 > and Google ADK are Stable; other hosts are Beta or Experimental — see
 > [`FRAMEWORKS.md`](./FRAMEWORKS.md) for per-host maturity.
 
