@@ -185,7 +185,7 @@ def _check_hosts() -> list[tuple[str, str, str]]:
                                 f"hooks wired in {cx} and `[features] hooks` enabled — but Codex "
                                 "also requires you to TRUST command hooks, which can't be verified "
                                 "from here. Trust the Reflexes definitions (Codex CLI: run `/hooks`; "
-                                "Codex app in ChatGPT: Settings → Hooks), restart, then confirm a "
+                                "Codex app in ChatGPT: hook review in the composer), restart, then confirm a "
                                 "known policy actually fires. (Until then, untrusted hooks are "
                                 "silently skipped — fail-open. Editing a hook re-requires trust.)"))
     hm = home / ".hermes" / "config.yaml"
