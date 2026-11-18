@@ -8,7 +8,7 @@ description: >
   stop and ask the user.
 metadata:
   author: zentropi
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Reflexes

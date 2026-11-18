@@ -1,11 +1,20 @@
 {
   "name": "@zentropi/reflexes-openclaw",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publishConfig": {
     "access": "public"
   },
   "description": "Reflexes for OpenClaw \u2014 an open safety harness for AI agents: inference-time, plain-English policy checks on tool calls and replies.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zentropi-ai/reflexes.git",
+    "directory": "integrations-ts/openclaw"
+  },
+  "homepage": "https://github.com/zentropi-ai/reflexes/tree/main/integrations-ts/openclaw#readme",
+  "bugs": {
+    "url": "https://github.com/zentropi-ai/reflexes/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
