@@ -341,22 +341,9 @@ enforcing; `1` = warnings (commonly no API key — wired but not enforcing);
 - **Codex, trust not yet granted:** the doctor can't see Codex's hook-trust
   state, so even a fully-wired Codex install is **not enforcing** until the user
   trusts the Reflexes definitions — in the Codex CLI via `/hooks`, or in the
-  Codex app (Codex in ChatGPT) via **Settings → Hooks** — and restarts. Tell
+  Codex app (Codex in ChatGPT) via **hook review** in the composer — and restarts. Tell
   the user this explicitly — it's a distinct "wired but not enforcing" case from
   the no-key one, and it needs a human (it can't be done headlessly).
-
-Then optionally walk **Verify it works** to see a policy fire.
-
-## Verify it works
-
-Confirms a policy fires end-to-end. The two `before_tool_call` integrity
-policies stop a pending tool call: in a fresh host session (restart first),
-give the agent a broad task ("clean up this project"); if it decides on its
-own to `rm` a file you never named, `Unconfirmed-Destructive-Action` denies
-the call *before it runs* and the agent asks you first instead. `Sycophancy`
-(`before_response`) fires when the agent's reply flatters or caves instead of
-giving honest judgment. Any policy firing and the agent revising = working. If
-nothing fires, see SKILL.md → Debug.
 
 ## Library install (Python frameworks)
 
@@ -469,10 +456,10 @@ Do the steps for the install type you're removing.
      `~/.reflexes/hermes-hook.sh`.
    - If your edit leaves the settings file invalid (JSON/YAML), you broke it —
      fix or restore it; never leave it malformed.
-2. **Remove the skill** — delete the skill folder (`SKILL_DIR`), or remove it
+2. **Restart the host** so it stops invoking the removed hooks.
+3. **Remove the skill** — delete the skill folder (`SKILL_DIR`), or remove it
    however the host manages skills. (Copying the folder in was the install;
    deleting it is the uninstall.)
-3. **Restart the host** so it stops invoking the removed hooks.
 4. **Confirm** — after restart, trigger something a policy used to catch; nothing
    should fire. (You can't run `reflexes-doctor` once the skill is gone — that's
    expected, not an error.)
