@@ -230,9 +230,9 @@ Add the `[features]` header if it's absent; if the user has `hooks` set to
 **(b) Trust the hooks.** Codex won't run command hooks until the user has
 reviewed and **trusted** them — an untrusted hook looks wired but never fires
 (fail open). Tell the user to review the Reflexes definitions and trust them:
-in the **Codex CLI**, run `/hooks`; in the **Codex app** (Codex in ChatGPT), open
-**Settings → Hooks**. Then restart Codex. (Editing a hook's command later
-changes its hash and requires trusting it again.)
+in the **Codex CLI**, run `/hooks`; in the **Codex app** (Codex in ChatGPT), use
+**hook review** in the composer. Then restart Codex. (Editing a hook's command
+later changes its hash and requires trusting it again.)
 
 `reflexes-doctor` confirms (a) but **cannot see Codex's trust state**, so it
 won't declare Codex "enforcing" — after trusting, confirm end-to-end: trigger a
@@ -409,7 +409,7 @@ options = ClaudeAgentOptions(
   enabled: add `hooks = true` under the `[features]` table in
   `~/.codex/config.toml` (a bare top-level key is ignored); `reflexes-doctor`
   flags this. Or (2) hooks not **trusted**: trust the Reflexes definitions
-  (Codex CLI: run `/hooks`; Codex app in ChatGPT: **Settings → Hooks**) and
+  (Codex CLI: run `/hooks`; Codex app in ChatGPT: **hook review** in the composer) and
   restart — Codex silently skips untrusted hooks (same symptom as an unreachable
   evaluator: fail-open), and editing a hook re-requires trust. The doctor can't
   see trust state, so it warns you to verify (2) yourself by triggering a known
