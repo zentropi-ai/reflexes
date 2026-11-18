@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-11-18
+
+### Changed
+- **Docs & site only — no runtime behavior change.**
+- **Codex install instructions revised** into cleaner numbered steps, and the
+  Codex-app hook-trust guidance is now **"hook review in the composer"** (was
+  "Settings → Hooks") consistently across `INSTALL.md` and the `reflexes doctor`
+  warning.
+- **Site hero headline** simplified to "Make your AI agent behave."
+
 ## [0.3.2] - 2026-11-18
 
 ### Changed
@@ -191,6 +201,7 @@ Initial public release.
 - **`reflexes doctor`** command to verify an installation (config
   parses, evaluator reachable, hooks present, logging posture).
 
+[0.3.3]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.3
 [0.3.2]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.2
 [0.3.1]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.1
 [0.3.0]: https://github.com/zentropi-ai/reflexes/releases/tag/v0.3.0
