@@ -335,10 +335,12 @@ def test_write_policy_section_teaches_cope_format():
 
 def test_swap_evaluator_uses_real_schema_not_drafting_error():
     """Swap-the-evaluator uses real evaluator types, never `type: cope`
-    (a model name, not an evaluator type)."""
+    (a model name, not an evaluator type). The default `type: systemone` is
+    documented; `type: zentropi` (the single-label API) is intentionally not
+    advertised here — we steer users to the batched System One endpoint."""
     body = SKILL_PATH.read_text(encoding="utf-8")
     section = body[body.index("## Swap the evaluator"):body.index("\n## Updating")]
-    for evaluator_type in ("type: zentropi", "type: openai",
+    for evaluator_type in ("type: systemone", "type: openai",
                            "type: anthropic", "type: gemini"):
         assert evaluator_type in section, f"Swap section missing {evaluator_type!r}"
     assert "type: cope" not in section
