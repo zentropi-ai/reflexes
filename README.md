@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: v0.3.2 — first public release.** Claude Code, OpenAI Codex, LangGraph,
+> **Status: v0.3.3 — first public release.** Claude Code, OpenAI Codex, LangGraph,
 > and Google ADK are Stable; other hosts are Beta or Experimental — see
 > [`FRAMEWORKS.md`](./FRAMEWORKS.md) for per-host maturity.
 
@@ -294,8 +294,12 @@ policy at a decision point in one forward pass. Set a `ZENTROPI_API_KEY` from
 [zentropi.ai](https://zentropi.ai) in the environment your agent runs in and
 policies fire with no further config.
 
-**Privacy:** send only what your policies need to evaluate; review your
-evaluator provider's retention terms for the endpoint you point at.
+**Privacy:** the Zentropi API is **zero data retention by default** — the policy
+and content sent for evaluation are not stored. For even greater security (data
+residency, air-gapped operation, or no external dependency at all), **self-host a
+decision model** so content never leaves your environment — see
+[Self-host CoPE](#self-host-cope-advanced) below. (If you point Reflexes at a
+different provider, review that provider's retention terms.)
 
 Prefer a different backend? Point Reflexes at any of the evaluators below.
 
@@ -348,8 +352,21 @@ dependency, end-to-end open-source inference (open SDK + open
 policies + open weights). Useful where data residency or air-gapped
 operation is required.
 
-Point Reflexes at your local CoPE endpoint via the OpenAI-compatible
-evaluator config:
+Point Reflexes at your local endpoint. If your server implements the **System
+One** protocol (`POST /v1/systemone`), use the default `systemone` evaluator —
+local endpoints are keyless, and you keep native multi-policy batching:
+
+```yaml
+evaluators:
+  default:
+    type: systemone
+    model: cope-b-s1
+    endpoint: http://localhost:8000/v1/systemone
+    # local endpoints need no api_key_env
+```
+
+Or, for a server exposing the OpenAI chat-completions shape, use the
+OpenAI-compatible evaluator (one call per policy):
 
 ```yaml
 evaluators:
@@ -359,7 +376,7 @@ evaluators:
     model: cope-b-s1
 ```
 
-**Roadmap (not yet shipped):** Ollama and llama.cpp builds. Until
+Either way, content never leaves your environment. **Roadmap (not yet shipped):** Ollama and llama.cpp builds. Until
 then, run CoPE via vLLM, TGI, or your preferred OpenAI-compatible
 serving stack.
 
