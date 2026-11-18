@@ -308,13 +308,14 @@ def test_references_dir_files_exist():
 
 
 def test_install_verify_demos_default_integrity_policies_safely():
-    """The Verify walkthrough (INSTALL.md) demos on the default integrity
-    policies and never instructs an unsafe allowlisted deletion."""
+    """The install documents the default integrity binding and a safe Verify
+    step (the doctor), and never instructs an unsafe allowlisted deletion."""
     body = INSTALL_PATH.read_text(encoding="utf-8")
-    verify = body[body.index("## Verify it works"):]
-    assert "Unconfirmed-Destructive-Action" in verify  # a default (integrity) policy
-    assert "before_tool_call" in verify
-    assert "rm /tmp/" not in body
+    verify = body[body.index("## Step 7: Verify"):]
+    assert "reflexes-doctor" in verify                 # Verify runs the doctor
+    assert "Unconfirmed-Destructive-Action" in body    # a default (integrity) policy is documented
+    assert "before_tool_call" in body
+    assert "rm /tmp/" not in body                       # never an unsafe allowlisted deletion
 
 
 def test_write_policy_section_teaches_cope_format():
