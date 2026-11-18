@@ -95,9 +95,9 @@ reflexes:                # WHAT is enforced — named groups of bindings
 evaluators:              # WHO scores content against the policies
   default:
     type: systemone                 # evaluates ALL policies at a decision point in ONE call
-    model: cope-b-s1                # Zentropi CoPE
-    endpoint: https://api.zentropi.ai/v1/systemone
-    api_key_env: ZENTROPI_API_KEY
+    model: cope-b-s1                # Zentropi's safety-tuned decision model
+    endpoint: https://api.zentropi.ai/v1/systemone # Any systemone endpoint 
+    api_key_env: ZENTROPI_API_KEY   # Env var for your api key
 
 # --- Operational settings (optional; safe defaults) ---
 enabled: true            # global on/off; false disables ALL enforcement. Absent = enabled.
@@ -280,7 +280,7 @@ adding an `evaluators.default` block to `~/.reflexes/reflexes.yaml`:
 evaluators:
   default:
     type: systemone                 # evaluates ALL policies at a decision point in ONE call
-    model: cope-b-s1                # the zero-config default (set ZENTROPI_API_KEY)
+    model: cope-b-s1                # Zentropi's safety-tuned decision model.
     endpoint: https://api.zentropi.ai/v1/systemone
     api_key_env: ZENTROPI_API_KEY
     # Or point at another System One backend — the spec is identical:
@@ -297,16 +297,8 @@ policies is one request, not one per policy. Swap backends with `model` +
 ```yaml
 evaluators:
   default:
-    type: zentropi                  # Zentropi hosted API, single-label (/v1/label)
-    model: cope-b-s1
-    api_key_env: ZENTROPI_API_KEY   # required — free key: https://zentropi.ai
-```
-
-```yaml
-evaluators:
-  default:
     type: openai                    # OpenAI, or any OpenAI-compatible endpoint
-    model: gpt-4o-mini
+    model: gpt-6-luna
     api_key_env: OPENAI_API_KEY
     # endpoint: http://localhost:11434/v1/chat/completions   # local (Ollama/vLLM/LM Studio/llama.cpp); then omit api_key_env
 ```
